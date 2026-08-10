@@ -17,6 +17,9 @@ from .settings import (
     STATE_NAME,
     STATE_SCOREBOARD,
     STATE_GAME,
+    DIFFICULTY_EASY,
+    DIFFICULTY_MEDIUM,
+    DIFFICULTY_HARD,
 )
 from .utils import safe_load_image, get_font, draw_center_text, format_time
 from .scores import load_scores
@@ -158,6 +161,58 @@ async def run_name_input(screen: pygame.Surface, clock: pygame.time.Clock) -> Op
         screen.blit(name_surf, (box_x + 18, box_y + 18))
         #Instructionn to go back
         draw_center_text(screen, font_body, "ESC TO GO BACK", 540, (255, 255, 255))
+        pygame.display.flip()
+        await asyncio.sleep(0)  #yield to browser each frame
+
+#Runs the difficulty-select screen (shown after name input, before the map preview)
+async def run_difficulty_select(screen: pygame.Surface, clock: pygame.time.Clock) -> Optional[str]:
+    """
+    Lets the player pick Easy/Medium/Hard with the 1/2/3 keys — this choice
+    tunes the Cop AI (Step 7) and picks which leaderboard bucket the run
+    gets saved to (Step 12). Returns:
+    - "quit" if the window is closed
+    - None if the player cancels with ESC (caller sends them back to the menu)
+    - DIFFICULTY_EASY / DIFFICULTY_MEDIUM / DIFFICULTY_HARD once chosen
+    """
+    menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
+    font_title = get_font(80)
+    font_option = get_font(46)
+    font_desc = get_font(30)
+
+    #Each option: (key, difficulty value, label, short description)
+    options = [
+        (pygame.K_1, DIFFICULTY_EASY, "1 - EASY", "A head start, and a slower, forgiving cop."),
+        (pygame.K_2, DIFFICULTY_MEDIUM, "2 - MEDIUM", "Balanced pace — the cop matches your speed."),
+        (pygame.K_3, DIFFICULTY_HARD, "3 - HARD", "Fast reflexes required — the cop is right behind you."),
+    ]
+
+    while True:
+        _ = clock.tick(FPS) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return None
+                for key, value, _label, _desc in options:
+                    if event.key == key:
+                        return value
+
+        if menu_bg:
+            screen.blit(menu_bg, (0, 0))
+        else:
+            screen.fill((10, 10, 25))
+
+        draw_center_text(screen, font_title, "SELECT DIFFICULTY", 140, (255, 255, 255))
+
+        start_y = 380
+        gap_y = 130
+        for i, (_key, _value, label, desc) in enumerate(options):
+            y = start_y + i * gap_y
+            draw_center_text(screen, font_option, label, y, (255, 255, 255))
+            draw_center_text(screen, font_desc, desc, y + 55, (200, 200, 200))
+
+        draw_center_text(screen, font_desc, "ESC TO GO BACK", SCREEN_H - 60, (200, 200, 200))
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
 

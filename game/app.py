@@ -10,7 +10,9 @@ from .settings import (
     SCREEN_W, SCREEN_H, FPS, ASSETS_DIR,
     BACKGROUND_FILE,
     DEFAULT_PLAT_W, DEFAULT_PLAT_H,
-    STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_MAP_PREVIEW, STATE_SCOREBOARD, STATE_GAME,
+    STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
+    STATE_SCOREBOARD, STATE_GAME,
+    DIFFICULTY_MEDIUM,
     WINDOW_TITLE,
 )
 #Import the helper functions + game systems from other python modules
@@ -21,7 +23,10 @@ from .camera import Camera
 from .platform import Platform
 from .player import Player
 from .level import build_platforms, get_spawn, get_goal_rect
-from .screens import run_splash, run_menu, run_name_input, run_scoreboard, run_map_preview
+from .screens import (
+    run_splash, run_menu, run_name_input, run_scoreboard,
+    run_map_preview, run_difficulty_select,
+)
 
 
 def load_background_world() -> pygame.Surface:
@@ -72,14 +77,16 @@ class GameApp:
         self.platforms: List[Platform] = build_platforms(self.world_w, self.world_h)
         #Goal collision area (goal is drawn as a glow, but collision is a Rect)
         self.goal_rect = get_goal_rect(self.world_w, self.world_h)
-        #Editor mode settings — hidden dev tool for tuning the fixed layout above,
-        #gated behind DEV_TOOLS_ENABLED (see settings.py)
+        #Editor mode settings — dev tool for tuning the fixed layout above (E to toggle)
         self.editor_mode = False
         self.plat_w = DEFAULT_PLAT_W
         self.plat_h = DEFAULT_PLAT_H
         #Global game state
         self.state = STATE_SPLASH
         self.player_name = "Unknown"
+        #Difficulty chosen on the difficulty-select screen; tunes the Cop AI (Step 7)
+        #and picks the leaderboard bucket a finished run is saved to (Step 12)
+        self.difficulty = DIFFICULTY_MEDIUM
         self.win = False
         #Timing variables
         self.run_start_ms: Optional[int] = None
@@ -132,6 +139,17 @@ class GameApp:
                     self.state = STATE_MENU
                 else:
                     self.player_name = name
+                    self.state = STATE_DIFFICULTY
+            #Difficulty-select state — Easy/Medium/Hard, tunes the Cop AI (Step 7)
+            #and the leaderboard bucket a finished run gets saved to (Step 12)
+            elif self.state == STATE_DIFFICULTY:
+                difficulty = await run_difficulty_select(self.screen, self.clock)
+                if difficulty == "quit":
+                    break
+                if difficulty is None:
+                    self.state = STATE_MENU
+                else:
+                    self.difficulty = difficulty
                     self.state = STATE_MAP_PREVIEW
             #Map preview state — shown before the run timer starts, so the player
             #can plan their route up the fixed Colosseum layout

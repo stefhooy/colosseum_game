@@ -54,10 +54,18 @@ GOAL_RING_R = 14
 WINDOW_TITLE = "COLOSSEUM CURFEW"
 
 #Game states here in order to help us switch screens
-#Going from menu -> name_input -> map_preview -> game -> scoreboard
+#Going from menu -> name_input -> difficulty -> map_preview -> game -> scoreboard
 STATE_SPLASH = "splash"
 STATE_MENU = "menu"
 STATE_NAME = "name"
+STATE_DIFFICULTY = "difficulty"
 STATE_MAP_PREVIEW = "map_preview"
 STATE_SCOREBOARD = "scoreboard"
 STATE_GAME = "game"
+
+#Difficulty levels — chosen on the difficulty-select screen, stored on GameApp,
+#and used to tune the Cop AI (Step 7) and to pick which leaderboard bucket a
+#finished run gets saved to (Step 12).
+DIFFICULTY_EASY = "easy"
+DIFFICULTY_MEDIUM = "medium"
+DIFFICULTY_HARD = "hard"
