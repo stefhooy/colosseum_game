@@ -9,9 +9,8 @@ from .audio import init_audio, play_music
 from .settings import (
     SCREEN_W, SCREEN_H, FPS, ASSETS_DIR,
     BACKGROUND_FILE,
-    GOAL_W, GOAL_H,
     DEFAULT_PLAT_W, DEFAULT_PLAT_H,
-    STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_SCOREBOARD, STATE_GAME,
+    STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_MAP_PREVIEW, STATE_SCOREBOARD, STATE_GAME,
     WINDOW_TITLE,
 )
 #Import the helper functions + game systems from other python modules
@@ -21,7 +20,8 @@ from .effects import draw_goal_glow
 from .camera import Camera
 from .platform import Platform
 from .player import Player
-from .screens import run_splash, run_menu, run_name_input, run_scoreboard
+from .level import build_platforms, get_spawn, get_goal_rect
+from .screens import run_splash, run_menu, run_name_input, run_scoreboard, run_map_preview
 
 
 def load_background_world() -> pygame.Surface:
@@ -66,14 +66,14 @@ class GameApp:
         self.world_w, self.world_h = self.background.get_width(), self.background.get_height()
         #Camera converts world coordinates -> screen coordinates (important for scrolling)
         self.camera = Camera(SCREEN_W, SCREEN_H, self.world_w, self.world_h)
-        #Level data, list of platforms (starts with a "floor" platform at the bottom —
-        #replaced with the fixed Colosseum layout in Step 4)
-        self.platforms: List[Platform] = [Platform(0, self.world_h - 40, self.world_w, 40)]
+        #Spawn position where the player starts (fixed level, see level.py)
+        self.spawn_x, self.spawn_y = get_spawn(self.world_w, self.world_h)
+        #Level data: the fixed, hand-authored Colosseum platform layout
+        self.platforms: List[Platform] = build_platforms(self.world_w, self.world_h)
         #Goal collision area (goal is drawn as a glow, but collision is a Rect)
-        self.goal_rect = pygame.Rect(self.world_w // 2, 120, GOAL_W, GOAL_H)
-        #Spawn position where the player starts
-        self.spawn_x, self.spawn_y = 80, self.world_h - 140
-        #Editor mode settings (allows placing/removing platforms during the game)
+        self.goal_rect = get_goal_rect(self.world_w, self.world_h)
+        #Editor mode settings — hidden dev tool for tuning the fixed layout above,
+        #gated behind DEV_TOOLS_ENABLED (see settings.py)
         self.editor_mode = False
         self.plat_w = DEFAULT_PLAT_W
         self.plat_h = DEFAULT_PLAT_H
@@ -90,15 +90,16 @@ class GameApp:
     def reset_run(self, clear_platforms: bool) -> None:
         """
         Resets the current run (timer + player position).
-        If clear_platforms is True, it also resets the level back to only the base floor.
+        If clear_platforms is True, it also resets the level back to the fixed
+        Colosseum layout — this discards any temporary edits made in the hidden
+        editor dev tool, so tuning always starts from the shipped layout.
         """
         self.win = False
         self.run_start_ms = pygame.time.get_ticks()
         self.final_time_s = None
         self.player.reset(self.spawn_x, self.spawn_y)
-        #If the player wants a "fresh run" (R), remove custom platforms and keep only the floor
         if clear_platforms:
-            self.platforms = [Platform(0, self.world_h - 40, self.world_w, 40)]
+            self.platforms = build_platforms(self.world_w, self.world_h)
 
     async def run(self) -> None:
         """
@@ -131,8 +132,20 @@ class GameApp:
                     self.state = STATE_MENU
                 else:
                     self.player_name = name
+                    self.state = STATE_MAP_PREVIEW
+            #Map preview state — shown before the run timer starts, so the player
+            #can plan their route up the fixed Colosseum layout
+            elif self.state == STATE_MAP_PREVIEW:
+                next_state = await run_map_preview(
+                    self.screen, self.clock, self.background,
+                    self.platforms, (self.spawn_x, self.spawn_y), self.goal_rect,
+                )
+                if next_state == "quit":
+                    break
+                if next_state == STATE_GAME:
+                    #Timer/run only actually starts once the player leaves the map preview
                     self.reset_run(clear_platforms=True)
-                    self.state = STATE_GAME
+                self.state = next_state
             #Scoreboard state
             elif self.state == STATE_SCOREBOARD:
                 next_state = await run_scoreboard(self.screen, self.clock)
@@ -172,8 +185,8 @@ class GameApp:
                 #Clicking ESC will go back to menu page
                 if event.key == pygame.K_ESCAPE:
                     self.state = STATE_MENU
-                #Clicking E will go in builder/editor mode (hidden dev tool — used to
-                #author the fixed Colosseum layout in Step 4, not part of the shipped game loop)
+                #Clicking E will go in builder/editor mode — used to tune the
+                #fixed Colosseum layout in level.py by hand
                 if event.key == pygame.K_e:
                     self.editor_mode = not self.editor_mode
                 #When in builder/editor mode

@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import os
 import pygame
-from typing import Optional
+from typing import List, Optional, Tuple
 
 #Import the things we need for the screens of our game
 from .settings import (
@@ -16,9 +16,12 @@ from .settings import (
     STATE_MENU,
     STATE_NAME,
     STATE_SCOREBOARD,
+    STATE_GAME,
 )
 from .utils import safe_load_image, get_font, draw_center_text, format_time
 from .scores import load_scores
+from .effects import draw_goal_glow
+from .platform import Platform
 
 async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     """
@@ -197,5 +200,68 @@ async def run_scoreboard(screen: pygame.Surface, clock: pygame.time.Clock) -> st
                 line = f"{i:02d}. {s['name']}  {format_time(s['time'])}"
                 draw_center_text(screen, font_body, line, start_y + (i - 1) * line_h)
         draw_center_text(screen, font_body, "PRESS ENTER OR ESC TO RETURN", 950, (255, 255, 0))
+        pygame.display.flip()
+        await asyncio.sleep(0)  #yield to browser each frame
+
+
+#Runs the pre-game map preview screen (shown after name input, before the run timer starts)
+async def run_map_preview(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    background: pygame.Surface,
+    platforms: List[Platform],
+    spawn: Tuple[int, int],
+    goal_rect: pygame.Rect,
+) -> str:
+    """
+    Shows the whole Colosseum background shrunk to fit the screen, with the
+    fixed platform layout, spawn point, and goal all marked, so the player
+    can plan their climb before the cop starts chasing. Any key or click
+    advances to gameplay; ESC goes back to the menu.
+    """
+    #The world is much taller than the screen, so we squash it down uniformly
+    #with separate x/y scale factors and apply the same factors to every
+    #marker below — that keeps everything lined up even though it's not a
+    #1:1 aspect-ratio preview.
+    world_w, world_h = background.get_size()
+    scale_x = SCREEN_W / world_w
+    scale_y = SCREEN_H / world_h
+    preview_bg = pygame.transform.smoothscale(background, (SCREEN_W, SCREEN_H))
+
+    def to_preview(wx: float, wy: float) -> tuple[int, int]:
+        return int(wx * scale_x), int(wy * scale_y)
+
+    font_title = get_font(64)
+    font_body = get_font(38)
+
+    while True:
+        _ = clock.tick(FPS) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return STATE_MENU
+                return STATE_GAME
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                return STATE_GAME
+
+        screen.blit(preview_bg, (0, 0))
+
+        #Draw the fixed platform layout so the whole route is visible at a glance
+        for p in platforms:
+            px, py = to_preview(p.rect.x, p.rect.y)
+            pw, ph = max(2, int(p.rect.w * scale_x)), max(2, int(p.rect.h * scale_y))
+            pygame.draw.rect(screen, (255, 215, 0), pygame.Rect(px, py, pw, ph), 2)
+
+        #Spawn marker (same orange dot style as the in-game spawn marker)
+        pygame.draw.circle(screen, (255, 165, 0), to_preview(*spawn), 8)
+        #Goal marker (reuses the same pulsing glow used in gameplay)
+        draw_goal_glow(screen, to_preview(goal_rect.centerx, goal_rect.centery))
+
+        draw_center_text(screen, font_title, "MEMORIZE YOUR ROUTE", 60, (255, 255, 255))
+        draw_center_text(screen, font_body, "PRESS ANY KEY TO BEGIN THE CLIMB", SCREEN_H - 100, (255, 255, 255))
+        draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (200, 200, 200))
+
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame

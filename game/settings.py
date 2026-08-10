@@ -54,9 +54,10 @@ GOAL_RING_R = 14
 WINDOW_TITLE = "COLOSSEUM CURFEW"
 
 #Game states here in order to help us switch screens
-#Going from menu -> name_input -> game -> scoreboard
+#Going from menu -> name_input -> map_preview -> game -> scoreboard
 STATE_SPLASH = "splash"
 STATE_MENU = "menu"
 STATE_NAME = "name"
+STATE_MAP_PREVIEW = "map_preview"
 STATE_SCOREBOARD = "scoreboard"
 STATE_GAME = "game"
