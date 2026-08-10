@@ -26,6 +26,10 @@ SCOREBOARD_BG_FILE = "scoreboard_background.png" #image for the scoreboard
 CHAR_STILL_FILE = "player_idle.png"
 CHAR_RUN_RIGHT_FILE = "player_run_right.png"
 CHAR_RUN_LEFT_FILE = "player_run_left.png"
+#The cop sprites (same 3-pose pattern as the player)
+COP_STILL_FILE = "cop_idle.png"
+COP_RUN_RIGHT_FILE = "cop_run_right.png"
+COP_RUN_LEFT_FILE = "cop_run_left.png"
 #Custom arcade font
 ARCADE_FONT_FILE = "arcade_font.ttf"
 #Where the scoreboard is saved into a json file
@@ -69,3 +73,25 @@ STATE_GAME = "game"
 DIFFICULTY_EASY = "easy"
 DIFFICULTY_MEDIUM = "medium"
 DIFFICULTY_HARD = "hard"
+
+#Cop AI tuning per difficulty (see cop.py). Speed is relative to the player's
+#own speed=260: Easy is slower (70%), Medium matches it, Hard is faster.
+#Reaction delay is how long (seconds) the cop's AI waits before it "notices"
+#a fresh player position — bigger delay = laggier, easier to shake off.
+#Start gap is how far behind the player (in world x, along the floor) the
+#cop spawns — bigger gap = more head start for the player.
+COP_SPEED_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 180.0,
+    DIFFICULTY_MEDIUM: 260.0,
+    DIFFICULTY_HARD: 310.0,
+}
+COP_REACTION_DELAY_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 0.6,
+    DIFFICULTY_MEDIUM: 0.3,
+    DIFFICULTY_HARD: 0.1,
+}
+COP_START_GAP_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 220,
+    DIFFICULTY_MEDIUM: 140,
+    DIFFICULTY_HARD: 80,
+}
