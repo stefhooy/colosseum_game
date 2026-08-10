@@ -1,0 +1,14 @@
+[project]
+name = "colosseum-curfew"
+version = "0.1.0"
+description = "A 2D vertical platformer built with Python and Pygame, reusing the architecture of Tower of IE: The Wizard Climb. Climb the Colosseum, dodge a police chaser, and reach the top before you're caught."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pygame>=2.6.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.2",
+]
