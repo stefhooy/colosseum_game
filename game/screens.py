@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import os
 import pygame
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 #Import the things we need for the screens of our game
 from .settings import (
@@ -24,7 +24,6 @@ from .settings import (
 from .utils import safe_load_image, get_font, draw_center_text, format_time
 from .scores import load_scores
 from .effects import draw_goal_glow
-from .platform import Platform
 
 async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     """
@@ -96,7 +95,7 @@ async def run_menu(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
             #Fallback measure if image is missing (just a dark bg will appear)
             screen.fill((10, 10, 25))
         #Title of the game! and brief description of the game for new incomers of the game
-        draw_center_text(screen, font_title, "COLOSSEUM CURFEW", TITLE_Y)
+        draw_center_text(screen, font_title, "CURSUS COLOSSEI", TITLE_Y)
         draw_center_text(screen, font_body, "It's your last night in Rome. Climb the Colosseum for one epic photo.", LINE1_Y,)
         draw_center_text(screen, font_body, "A cop is on your tail — reach the top before curfew catches you!", LINE2_Y,)
         #Show the menu options
@@ -264,15 +263,15 @@ async def run_map_preview(
     screen: pygame.Surface,
     clock: pygame.time.Clock,
     background: pygame.Surface,
-    platforms: List[Platform],
     spawn: Tuple[int, int],
     goal_rect: pygame.Rect,
 ) -> str:
     """
     Shows the whole Colosseum background shrunk to fit the screen, with the
-    fixed platform layout, spawn point, and goal all marked, so the player
-    can plan their climb before the cop starts chasing. Any key or click
-    advances to gameplay; ESC goes back to the menu.
+    spawn point and goal marked, so the player knows where they're starting
+    and what they're climbing to before the cop starts chasing. There's no
+    fixed platform layout to show — the player builds their own as they
+    climb. Any key or click advances to gameplay; ESC goes back to the menu.
     """
     #The world is much taller than the screen, so we squash it down uniformly
     #with separate x/y scale factors and apply the same factors to every
@@ -303,18 +302,12 @@ async def run_map_preview(
 
         screen.blit(preview_bg, (0, 0))
 
-        #Draw the fixed platform layout so the whole route is visible at a glance
-        for p in platforms:
-            px, py = to_preview(p.rect.x, p.rect.y)
-            pw, ph = max(2, int(p.rect.w * scale_x)), max(2, int(p.rect.h * scale_y))
-            pygame.draw.rect(screen, (255, 215, 0), pygame.Rect(px, py, pw, ph), 2)
-
         #Spawn marker (same orange dot style as the in-game spawn marker)
         pygame.draw.circle(screen, (255, 165, 0), to_preview(*spawn), 8)
         #Goal marker (reuses the same pulsing glow used in gameplay)
         draw_goal_glow(screen, to_preview(goal_rect.centerx, goal_rect.centery))
 
-        draw_center_text(screen, font_title, "MEMORIZE YOUR ROUTE", 60, (255, 255, 255))
+        draw_center_text(screen, font_title, "SCOUT THE COLOSSEUM", 60, (255, 255, 255))
         draw_center_text(screen, font_body, "PRESS ANY KEY TO BEGIN THE CLIMB", SCREEN_H - 100, (255, 255, 255))
         draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (200, 200, 200))
 

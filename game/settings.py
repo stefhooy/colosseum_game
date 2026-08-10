@@ -19,9 +19,10 @@ FPS = 60
 #folder where I stored every visual elements for the game
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 BACKGROUND_FILE = "background.png" #main gameplay background (the Colosseum), also defines world size
-FIRST_SCREEN_FILE = "first_screen.jpg" #splash/intro screen shown before the menu
+FIRST_SCREEN_FILE = "first_screen.png" #splash/intro screen shown before the menu
 MENU_BG_FILE = "menu_background.png" #image for the first page of the game (menu)
 SCOREBOARD_BG_FILE = "scoreboard_background.png" #image for the scoreboard
+FINAL_BG_FILE = "final_background.png" #image for the dedicated "photo captured" win screen
 #The player sprites (3 images, idle, running right, running left)
 CHAR_STILL_FILE = "player_idle.png"
 CHAR_RUN_RIGHT_FILE = "player_run_right.png"
@@ -43,7 +44,7 @@ SPRITE_TARGET_H = 100
 #Small offset so that the character's feet can line up nicely with the collision rectangle
 FEET_OFFSET_Y = 10
 
-#Default platform size when you start building platforms in editor mode (E)
+#Default size of the next platform the player places (core climbing mechanic)
 DEFAULT_PLAT_W = 160
 DEFAULT_PLAT_H = 16
 #Size of the goal collision area. Even though the goal is drawn visually (photo/flash effect),
@@ -55,7 +56,7 @@ PLATFORM_OUTLINE = (0, 0, 0)
 #Radius used to draw the glowing goal ring (for visual effect)
 GOAL_RING_R = 14
 #Window title is displayed at the top of the pygame window
-WINDOW_TITLE = "COLOSSEUM CURFEW"
+WINDOW_TITLE = "CURSUS COLOSSEI"
 
 #Game states here in order to help us switch screens
 #Going from menu -> name_input -> difficulty -> map_preview -> game -> scoreboard
@@ -95,11 +96,11 @@ COP_START_GAP_BY_DIFFICULTY = {
     DIFFICULTY_MEDIUM: 140,
     DIFFICULTY_HARD: 80,
 }
-#How long (seconds) the cop keeps attempting a normal jump toward the next
-#waypoint before giving up and "cheating" — materializing a platform under
-#itself to guarantee progress (see cop.py). Hard barely tries before
-#cheating; Easy tries for a while first, giving the player more breathing
-#room and making the cop feel like it's genuinely struggling.
+#How long (seconds) the cop keeps attempting a normal jump toward the player
+#before giving up and "cheating" — a guaranteed hop toward them (see cop.py).
+#Hard barely tries before cheating; Easy tries for a while first, giving the
+#player more breathing room and making the cop feel like it's genuinely
+#struggling.
 COP_PATIENCE_BY_DIFFICULTY = {
     DIFFICULTY_EASY: 2.5,
     DIFFICULTY_MEDIUM: 1.2,

@@ -71,14 +71,15 @@ class GameApp:
         self.world_w, self.world_h = self.background.get_width(), self.background.get_height()
         #Camera converts world coordinates -> screen coordinates (important for scrolling)
         self.camera = Camera(SCREEN_W, SCREEN_H, self.world_w, self.world_h)
-        #Spawn position where the player starts (fixed level, see level.py)
+        #Spawn position where the player starts
         self.spawn_x, self.spawn_y = get_spawn(self.world_w, self.world_h)
-        #Level data: the fixed, hand-authored Colosseum platform layout
+        #Level data: starts as just the floor — climbing this game means
+        #building your own platforms live as you go (core mechanic, not a
+        #hidden dev tool), so there's nothing else to pre-author here
         self.platforms: List[Platform] = build_platforms(self.world_w, self.world_h)
         #Goal collision area (goal is drawn as a glow, but collision is a Rect)
         self.goal_rect = get_goal_rect(self.world_w, self.world_h)
-        #Editor mode settings — dev tool for tuning the fixed layout above (E to toggle)
-        self.editor_mode = False
+        #Size of the next platform the player places (adjustable with [ ]/-+)
         self.plat_w = DEFAULT_PLAT_W
         self.plat_h = DEFAULT_PLAT_H
         #Global game state
@@ -97,9 +98,8 @@ class GameApp:
     def reset_run(self, clear_platforms: bool) -> None:
         """
         Resets the current run (timer + player position).
-        If clear_platforms is True, it also resets the level back to the fixed
-        Colosseum layout — this discards any temporary edits made in the hidden
-        editor dev tool, so tuning always starts from the shipped layout.
+        If clear_platforms is True, it also clears every platform the player
+        has built this run, back down to just the floor.
         """
         self.win = False
         self.run_start_ms = pygame.time.get_ticks()
@@ -152,11 +152,11 @@ class GameApp:
                     self.difficulty = difficulty
                     self.state = STATE_MAP_PREVIEW
             #Map preview state — shown before the run timer starts, so the player
-            #can plan their route up the fixed Colosseum layout
+            #knows their spawn and goal before the cop starts chasing
             elif self.state == STATE_MAP_PREVIEW:
                 next_state = await run_map_preview(
                     self.screen, self.clock, self.background,
-                    self.platforms, (self.spawn_x, self.spawn_y), self.goal_rect,
+                    (self.spawn_x, self.spawn_y), self.goal_rect,
                 )
                 if next_state == "quit":
                     break
@@ -203,24 +203,20 @@ class GameApp:
                 #Clicking ESC will go back to menu page
                 if event.key == pygame.K_ESCAPE:
                     self.state = STATE_MENU
-                #Clicking E will go in builder/editor mode — used to tune the
-                #fixed Colosseum layout in level.py by hand
-                if event.key == pygame.K_e:
-                    self.editor_mode = not self.editor_mode
-                #When in builder/editor mode
-                if self.editor_mode:
-                    #Control the width of the platfrom with []
-                    if event.key == pygame.K_LEFTBRACKET:
-                        self.plat_w = max(40, self.plat_w - 20)
-                    if event.key == pygame.K_RIGHTBRACKET:
-                        self.plat_w = min(600, self.plat_w + 20)
-                    #Control the height of the platform with - and + from the numeric keypad
-                    if event.key == pygame.K_KP_MINUS:
-                        self.plat_h = max(8, self.plat_h - 4)
-                    if event.key == pygame.K_KP_PLUS:
-                        self.plat_h = min(80, self.plat_h + 4)
-            #Mouse clicks while in editor mode
-            if event.type == pygame.MOUSEBUTTONDOWN and self.editor_mode:
+                #Building platforms is always available (not a toggle) —
+                #it IS the core way you climb here. [ ] adjusts width,
+                #-/+ on the numpad adjusts height of the NEXT platform placed
+                if event.key == pygame.K_LEFTBRACKET:
+                    self.plat_w = max(40, self.plat_w - 20)
+                if event.key == pygame.K_RIGHTBRACKET:
+                    self.plat_w = min(600, self.plat_w + 20)
+                if event.key == pygame.K_KP_MINUS:
+                    self.plat_h = max(8, self.plat_h - 4)
+                if event.key == pygame.K_KP_PLUS:
+                    self.plat_h = min(80, self.plat_h + 4)
+            #Mouse clicks place/remove platforms — live, while still running
+            #and being chased, no pause
+            if event.type == pygame.MOUSEBUTTONDOWN:
                 #convert our mouse position (screen) into world coordinates using camera offstes
                 mx, my = pygame.mouse.get_pos()
                 wx = mx + self.camera.offset_x
@@ -239,8 +235,8 @@ class GameApp:
                     self.platforms.remove(nearest)
         #GAmeplay updates
         keys = pygame.key.get_pressed()
-        #Update the physics if we're not editing and haven't wont yet
-        if not self.editor_mode and not self.win:
+        #Update the physics if the run isn't won yet
+        if not self.win:
             self.player.handle_input(keys)
             self.player.try_jump(keys)
             self.player.move_and_collide(dt, self.platforms)
@@ -256,7 +252,7 @@ class GameApp:
                     self.final_time_s = elapsed_ms / 1000.0
                     add_score(self.player_name, self.final_time_s)
         else:
-            #If we're editing or the run is finished, we will freeze the player movement
+            #Once the run is finished, freeze the player movement
             self.player.vx = 0.0
             self.player.vy = 0.0
         #this is to prevent infinte falling or player disappearing or camera following the player
@@ -289,26 +285,25 @@ class GameApp:
         gx, gy = self.camera.apply(self.goal_rect.centerx, self.goal_rect.centery)
         draw_goal_glow(self.screen, (gx, gy))
 
-        #In editor mode, to help author the fixed level layout,
-        #we will show a "ghost"/preview of the platform size at the mouse position
-        if self.editor_mode:
-            mx, my = pygame.mouse.get_pos()
-            wx = mx + self.camera.offset_x
-            wy = my + self.camera.offset_y
+        #Ghost/preview of the next platform's size at the mouse position —
+        #always shown, since placing platforms is the core way you climb
+        mx, my = pygame.mouse.get_pos()
+        wx = mx + self.camera.offset_x
+        wy = my + self.camera.offset_y
 
-            ghost_x = int(wx - self.plat_w / 2)
-            ghost_y = int(wy - self.plat_h / 2)
-            gx2, gy2 = self.camera.apply(ghost_x, ghost_y)
-            ghost_rect = pygame.Rect(gx2, gy2, self.plat_w, self.plat_h)
+        ghost_x = int(wx - self.plat_w / 2)
+        ghost_y = int(wy - self.plat_h / 2)
+        gx2, gy2 = self.camera.apply(ghost_x, ghost_y)
+        ghost_rect = pygame.Rect(gx2, gy2, self.plat_w, self.plat_h)
 
-            ghost_r = max(2, self.plat_h // 2)
-            pygame.draw.rect(self.screen, (150, 200, 255), ghost_rect, 2, border_radius=ghost_r)
-            #display the possibilities in editor mode
-            hud = self.font_editor.render(
-                "EDITOR ON | [ ] width | -/+ height | LMB add | RMB remove | E toggle | R restart",
-                True,
-                (0, 0, 0),)
-            self.screen.blit(hud, (20, 20))
+        ghost_r = max(2, self.plat_h // 2)
+        pygame.draw.rect(self.screen, (150, 200, 255), ghost_rect, 2, border_radius=ghost_r)
+        #control hint, always visible during gameplay
+        hud = self.font_editor.render(
+            "[ ] width | -/+ height | LMB add | RMB remove | R restart",
+            True,
+            (0, 0, 0),)
+        self.screen.blit(hud, (20, 20))
         #Draw platforms
         for p in self.platforms:
             p.draw(self.screen, self.camera)
