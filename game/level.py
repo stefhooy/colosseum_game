@@ -28,9 +28,23 @@ can clear too:
     land) after already going above STEP_UP and coming back down to it —
     that "time back at height STEP_UP" bounds how long there is to also
     move sideways. At STEP_UP=70 that's ~0.80s of hang time, i.e. ~145px of
-    horizontal budget at the Easy cop's 180px/s. Consecutive platforms are
-    LANE_HALF_WIDTH*2 = 110px apart horizontally — a comfortable ~24%
-    margin under that budget.
+    horizontal budget at the Easy cop's 180px/s.
+  - LANE_GAP is the actual empty horizontal space between one platform's
+    edge and the next one's edge (NOT how far each sits from center) — it
+    has to be a real, non-overlapping gap. Consecutive platforms sitting
+    close enough to overlap horizontally causes a nasty second bug: an
+    entity standing on the lower one has almost no headroom before the
+    upper one's underside, so jumping instantly clips the "ceiling" and
+    gets cancelled a couple pixels up. Keeping LANE_GAP=100 (well under the
+    ~145px budget) guarantees a real gap and rules that out entirely.
+  - Two lanes isn't enough, even with a real gap between them: platform i
+    and platform i+2 would then sit in the *same* lane, directly on top of
+    each other, only 2*STEP_UP apart. With STEP_UP=70 that's only
+    2*70-TIER_H-PLAYER_H = 72px of headroom above platform i — almost
+    exactly the 70px rise needed to reach platform i+1, so the jump clips
+    platform i+2's underside before it can complete. Cycling through THREE
+    lanes (left/center/right) means same-lane tiers are 3*STEP_UP=210px
+    apart instead, giving 210-20-48=142px of headroom — comfortably clear.
 """
 from __future__ import annotations
 from typing import List, Tuple
@@ -44,9 +58,14 @@ FLOOR_H = 40
 
 #--- Physics-tuned climb parameters (see module docstring for the math) ---
 STEP_UP = 70             #vertical rise between consecutive platforms (px)
-LANE_HALF_WIDTH = 55     #each platform sits this far left/right of world center (px)
-TIER_COUNT = 15          #how many platforms make up the climb
+LANE_GAP = 100           #real empty horizontal gap between adjacent lanes (px)
 TIER_W, TIER_H = 200, 20  #size of each climbing platform (Colosseum tier/arch)
+#Left/center/right lane centers, spaced so adjacent lanes are LANE_GAP apart
+#edge-to-edge — three lanes (not two) so same-lane tiers land 3*STEP_UP apart
+#instead of 2*STEP_UP, avoiding the headroom problem described above.
+LANE_STEP = LANE_GAP + TIER_W
+LANE_OFFSETS = (-LANE_STEP, 0, LANE_STEP)  #left, center, right
+TIER_COUNT = 15          #how many platforms make up the climb
 GOAL_GAP = 140           #extra gap above the topmost platform before the goal (px)
 TOP_MARGIN = 150         #breathing room above the goal, for camera framing (px)
 
@@ -60,8 +79,8 @@ def build_platforms(world_w: int, world_h: int) -> List[Platform]:
     """
     Builds the fixed list of Platform objects for the current world size.
     Always starts with a full-width floor at the bottom (so the player has
-    solid ground to spawn on), then adds TIER_COUNT platforms zigzagging
-    up and alternating left/right of the world's horizontal center.
+    solid ground to spawn on), then adds TIER_COUNT platforms cycling
+    through the left/center/right lanes as they climb.
     """
     if world_h < MIN_WORLD_H:
         print(
@@ -76,9 +95,8 @@ def build_platforms(world_w: int, world_h: int) -> List[Platform]:
     platforms: List[Platform] = [Platform(0, floor_top, world_w, FLOOR_H)]
 
     for i in range(1, TIER_COUNT + 1):
-        #alternate left/right of center, starting on the left
-        dx = -LANE_HALF_WIDTH if i % 2 == 1 else LANE_HALF_WIDTH
-        x = center_x + dx - TIER_W // 2
+        lane_offset = LANE_OFFSETS[(i - 1) % len(LANE_OFFSETS)]
+        x = center_x + lane_offset - TIER_W // 2
         y = floor_top - i * STEP_UP
         platforms.append(Platform(x, y, TIER_W, TIER_H))
 
@@ -99,10 +117,10 @@ def get_goal_rect(world_w: int, world_h: int) -> pygame.Rect:
     """
     floor_top = world_h - FLOOR_H
     center_x = world_w // 2
-    top_dx = -LANE_HALF_WIDTH if TIER_COUNT % 2 == 1 else LANE_HALF_WIDTH
+    top_lane_offset = LANE_OFFSETS[(TIER_COUNT - 1) % len(LANE_OFFSETS)]
     top_rise = TIER_COUNT * STEP_UP
 
-    goal_x = center_x + top_dx - GOAL_W // 2
+    goal_x = center_x + top_lane_offset - GOAL_W // 2
     goal_y = floor_top - top_rise - GOAL_GAP - GOAL_H
     return pygame.Rect(goal_x, goal_y, GOAL_W, GOAL_H)
 

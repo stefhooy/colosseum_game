@@ -95,3 +95,13 @@ COP_START_GAP_BY_DIFFICULTY = {
     DIFFICULTY_MEDIUM: 140,
     DIFFICULTY_HARD: 80,
 }
+#How long (seconds) the cop keeps attempting a normal jump toward the next
+#waypoint before giving up and "cheating" — materializing a platform under
+#itself to guarantee progress (see cop.py). Hard barely tries before
+#cheating; Easy tries for a while first, giving the player more breathing
+#room and making the cop feel like it's genuinely struggling.
+COP_PATIENCE_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 2.5,
+    DIFFICULTY_MEDIUM: 1.2,
+    DIFFICULTY_HARD: 0.3,
+}
