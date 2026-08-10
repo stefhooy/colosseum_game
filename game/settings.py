@@ -14,6 +14,14 @@ else:
 SCREEN_W, SCREEN_H = 1920, 1080
 #Frames per second target, how fast we will update and draw the game.
 FPS = 60
+#Hard cap on dt (seconds) used for one physics step. Without this, a real
+#frame hitch (asset loading, window drag, OS stall) produces one huge dt,
+#which can move a fast-falling entity so far in a single step that it
+#tunnels past a platform's collision check entirely — and if it then ends
+#up vertically overlapping a wide platform like the floor, the horizontal
+#collision pass misreads that platform as a side wall and teleports the
+#entity to the world's edge. Capping dt keeps every step small and safe.
+MAX_DT = 0.05
 
 #Assets of the game (images, fonts and saved scores)
 #folder where I stored every visual elements for the game

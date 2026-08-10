@@ -7,7 +7,7 @@ from .audio import init_audio, play_music
 
 #Import the configuration/constants from settings.py
 from .settings import (
-    SCREEN_W, SCREEN_H, FPS, ASSETS_DIR,
+    SCREEN_W, SCREEN_H, FPS, MAX_DT, ASSETS_DIR,
     BACKGROUND_FILE,
     DEFAULT_PLAT_W, DEFAULT_PLAT_H,
     STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
@@ -22,6 +22,7 @@ from .effects import draw_goal_glow
 from .camera import Camera
 from .platform import Platform
 from .player import Player
+from .cop import Cop, get_spawn_position as get_cop_spawn_position
 from .level import build_platforms, get_spawn, get_goal_rect
 from .screens import (
     run_splash, run_menu, run_name_input, run_scoreboard,
@@ -89,22 +90,33 @@ class GameApp:
         #and picks the leaderboard bucket a finished run is saved to (Step 12)
         self.difficulty = DIFFICULTY_MEDIUM
         self.win = False
+        #True once the cop catches the player — a separate flag from win,
+        #since a run can only end one way or the other
+        self.caught = False
         #Timing variables
         self.run_start_ms: Optional[int] = None
         self.final_time_s: Optional[float] = None
         #Create the Player object
         self.player = Player(self.spawn_x, self.spawn_y)
+        #Create the Cop object, spawned behind the player by a difficulty-dependent gap
+        cop_x, cop_y = get_cop_spawn_position((self.spawn_x, self.spawn_y), self.difficulty)
+        self.cop = Cop(cop_x, cop_y, self.difficulty)
 
     def reset_run(self, clear_platforms: bool) -> None:
         """
-        Resets the current run (timer + player position).
+        Resets the current run (timer + player + cop position).
         If clear_platforms is True, it also clears every platform the player
         has built this run, back down to just the floor.
         """
         self.win = False
+        self.caught = False
         self.run_start_ms = pygame.time.get_ticks()
         self.final_time_s = None
         self.player.reset(self.spawn_x, self.spawn_y)
+        #Cop position/tuning are reapplied here too, since the difficulty may
+        #have changed since the last run (fresh difficulty-select choice)
+        cop_x, cop_y = get_cop_spawn_position((self.spawn_x, self.spawn_y), self.difficulty)
+        self.cop.reset(cop_x, cop_y, self.difficulty)
         if clear_platforms:
             self.platforms = build_platforms(self.world_w, self.world_h)
 
@@ -185,7 +197,9 @@ class GameApp:
         - draw everything
         """
         #dt = delta time (seconds per frame). This keeps movement stable across FPS changes.
-        dt = self.clock.tick(FPS) / 1000.0
+        #Capped at MAX_DT so a real frame hitch can't cause a single huge
+        #physics step (see settings.py for why that's dangerous here).
+        dt = min(self.clock.tick(FPS) / 1000.0, MAX_DT)
         #If timer hasn't started yet, start it now
         if self.run_start_ms is None:
             self.run_start_ms = pygame.time.get_ticks()
@@ -235,13 +249,20 @@ class GameApp:
                     self.platforms.remove(nearest)
         #GAmeplay updates
         keys = pygame.key.get_pressed()
-        #Update the physics if the run isn't won yet
-        if not self.win:
+        #Update the physics if the run hasn't ended yet (win or caught)
+        if not self.win and not self.caught:
             self.player.handle_input(keys)
             self.player.try_jump(keys)
             self.player.move_and_collide(dt, self.platforms)
             self.player.clamp_to_world_x(self.world_w)
-            #Win condition here, if only the player collides with the goal area
+
+            self.cop.ai_steer(dt, self.player.rect)
+            self.cop.ai_try_jump(self.player.rect)
+            self.cop.move_and_collide(dt, self.platforms)
+            self.cop.clamp_to_world_x(self.world_w)
+
+            #Win condition takes priority if both happen to trigger the same
+            #frame — benefit of the doubt to the player
             if self.player.rect.colliderect(self.goal_rect):
                 self.win = True
                 self.player.vx = 0.0
@@ -251,6 +272,16 @@ class GameApp:
                     elapsed_ms = pygame.time.get_ticks() - self.run_start_ms
                     self.final_time_s = elapsed_ms / 1000.0
                     add_score(self.player_name, self.final_time_s)
+            #Lose condition: the cop caught the player
+            elif self.cop.rect.colliderect(self.player.rect):
+                self.caught = True
+                self.player.vx = 0.0
+                self.player.vy = 0.0
+                #Freeze the HUD timer here too — no score is saved on a loss,
+                #but final_time_s is what stops the timer from still ticking
+                if self.run_start_ms is not None and self.final_time_s is None:
+                    elapsed_ms = pygame.time.get_ticks() - self.run_start_ms
+                    self.final_time_s = elapsed_ms / 1000.0
         else:
             #Once the run is finished, freeze the player movement
             self.player.vx = 0.0
@@ -263,9 +294,9 @@ class GameApp:
         self.camera.follow(self.player.rect.centerx, self.player.rect.centery)
         #draw everything for this frame
         self._draw()
-        #If player has won/finished the race, grant "S" shortcut to check out his scores and see with
-        #the others how he did
-        if self.win and self.final_time_s is not None:
+        #If the run has ended (won or caught), grant "S" shortcut to check
+        #out the scores and see how he did
+        if (self.win and self.final_time_s is not None) or self.caught:
             if pygame.key.get_pressed()[pygame.K_s]:
                 self.state = STATE_SCOREBOARD
 
@@ -307,8 +338,9 @@ class GameApp:
         #Draw platforms
         for p in self.platforms:
             p.draw(self.screen, self.camera)
-        #Draw the player
+        #Draw the player and the cop chasing them
         self.player.draw(self.screen, self.camera)
+        self.cop.draw(self.screen, self.camera)
 
         #HUD : player name + timer
         if self.run_start_ms is not None and self.final_time_s is None:
@@ -340,6 +372,26 @@ class GameApp:
             pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
             pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(box_x, box_y, box_w, box_h), 2)
             #Draw the message inside the box
+            self.screen.blit(msg1, (box_x + 40, box_y + 25))
+            self.screen.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
+            self.screen.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))
+
+        #Caught overlay — same visual language as the win overlay above, just
+        #with a red accent border. A dedicated full-screen version of this
+        #comes later (Step 11); this is the basic wired-up version for now.
+        if self.caught:
+            big = get_font(84)
+            small = get_font(44)
+
+            msg1 = big.render("THE COP CAUGHT YOU!", True, (255, 255, 255))
+            msg2 = small.render(f"CAUGHT AFTER: {format_time(self.final_time_s or 0.0)}", True, (255, 255, 255))
+            msg3 = small.render("R RESTART (CLEARS PLATFORMS) | ESC MENU | S SCOREBOARD", True, (255, 255, 255))
+            box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
+            box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 80
+            box_x = (SCREEN_W - box_w) // 2
+            box_y = (SCREEN_H - box_h) // 2
+            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
+            pygame.draw.rect(self.screen, (200, 50, 50), pygame.Rect(box_x, box_y, box_w, box_h), 2)
             self.screen.blit(msg1, (box_x + 40, box_y + 25))
             self.screen.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
             self.screen.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))

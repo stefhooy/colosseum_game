@@ -23,8 +23,8 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 5. **Pre-game map preview screen** — shows the background, spawn, and goal (no route to memorize anymore, since there's no fixed route). ✅ done
 6. **Difficulty-select screen** — Easy / Medium / Hard, wired into `GameApp`. ✅ done
 7. **Cop entity + AI chase logic** — mirrors `Player`'s rect/physics/collision; always chases the player directly, with a guaranteed cheat-hop fallback when stuck (no fixed layout to path along). ✅ done
-8. **Wire the cop into `app.py`** — per-frame update/draw, add `STATE_GAMEOVER` "caught" flow alongside the existing win flow. *(next up)*
-9. **Zoomed-out "grandiose" camera** — off-screen virtual-resolution surface + `smoothscale`, confirm all draw calls still align.
+8. **Wire the cop into `app.py`** — cop is now updated/drawn every frame, with a `self.caught` flag (mirroring `self.win`) that freezes both entities and shows a basic "THE COP CAUGHT YOU!" overlay; a full dedicated `STATE_GAMEOVER` screen comes in Step 11 along with the dedicated win screen. ✅ done
+9. **Zoomed-out "grandiose" camera** *(next up)* — off-screen virtual-resolution surface + `smoothscale`, confirm all draw calls still align.
 10. **Top-right minimap HUD** — vertical progress bar with player/cop/goal markers.
 11. **Win ("photo captured") and lose ("caught") screens** — a dedicated full-screen win moment (using `final_background.png`, decided once real art arrived — not just a small overlay box) plus a lose overlay matching the existing visual language.
 12. **Per-difficulty leaderboard (local JSON)** — each score stores `difficulty`, ranked/truncated to top-10 within its own bucket; scoreboard screen shows all three (stacked or tabbed, clearly labeled, switchable without leaving the screen).
