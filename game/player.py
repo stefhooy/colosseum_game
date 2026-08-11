@@ -15,6 +15,8 @@ from .settings import (
     CHAR_STILL_FILE,
     CHAR_RUN_RIGHT_FILE,
     CHAR_RUN_LEFT_FILE,
+    CHAR_JUMP_RIGHT_FILE,
+    CHAR_JUMP_LEFT_FILE,
 )
 
 #This class is the player that we will control
@@ -43,10 +45,14 @@ class Player:
         still_path = os.path.join(ASSETS_DIR, CHAR_STILL_FILE)
         run_r_path = os.path.join(ASSETS_DIR, CHAR_RUN_RIGHT_FILE)
         run_l_path = os.path.join(ASSETS_DIR, CHAR_RUN_LEFT_FILE)
+        jump_r_path = os.path.join(ASSETS_DIR, CHAR_JUMP_RIGHT_FILE)
+        jump_l_path = os.path.join(ASSETS_DIR, CHAR_JUMP_LEFT_FILE)
         #Load the images
         still = safe_load_image(still_path, convert_alpha=True)
         run_r = safe_load_image(run_r_path, convert_alpha=True)
         run_l = safe_load_image(run_l_path, convert_alpha=True)
+        jump_r = safe_load_image(jump_r_path, convert_alpha=True)
+        jump_l = safe_load_image(jump_l_path, convert_alpha=True)
         #if any character sprites are missing then we stop the execution of the pygame
         if still is None or run_r is None or run_l is None:
             raise FileNotFoundError(
@@ -56,6 +62,11 @@ class Player:
         self.sprite_idle = scale_to_target_height(still, SPRITE_TARGET_H)
         self.sprite_run_r = scale_to_target_height(run_r, SPRITE_TARGET_H)
         self.sprite_run_l = scale_to_target_height(run_l, SPRITE_TARGET_H)
+        #Jump pose falls back to the run sprite if it's ever missing (unlike
+        #the 3 base poses, this one won't crash the game — it's an added-on
+        #4th pose, not something the game was originally built to require)
+        self.sprite_jump_r = scale_to_target_height(jump_r, SPRITE_TARGET_H) if jump_r else self.sprite_run_r
+        self.sprite_jump_l = scale_to_target_height(jump_l, SPRITE_TARGET_H) if jump_l else self.sprite_run_l
 
     #Resets the player position and physics values, we use this when we want to restart the run/climb
     def reset(self, x: int, y: int) -> None:
@@ -92,8 +103,11 @@ class Player:
         if self.rect.right > world_w:
             self.rect.right = world_w
 
-    #Chooses which sprite to display depending on movement direction
+    #Chooses which sprite to display depending on movement direction and
+    #whether we're airborne (jumping or falling)
     def _pick_sprite(self) -> pygame.Surface:
+        if not self.on_ground:
+            return self.sprite_jump_r if self.facing_right else self.sprite_jump_l
         moving = abs(self.vx) > 1e-3
         if not moving:
             return self.sprite_idle

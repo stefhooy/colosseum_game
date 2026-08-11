@@ -40,14 +40,18 @@ FIRST_SCREEN_FILE = "first_screen.png" #splash/intro screen shown before the men
 MENU_BG_FILE = "menu_background.png" #image for the first page of the game (menu)
 SCOREBOARD_BG_FILE = "scoreboard_background.png" #image for the scoreboard
 FINAL_BG_FILE = "final_background.png" #image for the dedicated "photo captured" win screen
-#The player sprites (3 images, idle, running right, running left)
+#The player sprites (4 images: idle, running right, running left, jumping/airborne)
 CHAR_STILL_FILE = "player_idle.png"
 CHAR_RUN_RIGHT_FILE = "player_run_right.png"
 CHAR_RUN_LEFT_FILE = "player_run_left.png"
-#The cop sprites (same 3-pose pattern as the player)
+CHAR_JUMP_RIGHT_FILE = "player_jump_right.png"
+CHAR_JUMP_LEFT_FILE = "player_jump_left.png"
+#The cop sprites (same 4-pose pattern as the player)
 COP_STILL_FILE = "cop_idle.png"
 COP_RUN_RIGHT_FILE = "cop_run_right.png"
 COP_RUN_LEFT_FILE = "cop_run_left.png"
+COP_JUMP_RIGHT_FILE = "cop_jump_right.png"
+COP_JUMP_LEFT_FILE = "cop_jump_left.png"
 #Custom arcade font
 ARCADE_FONT_FILE = "Star Crush.ttf"
 #Where the scoreboard is saved into a json file

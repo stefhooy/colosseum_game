@@ -28,7 +28,7 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 10. **Top-right minimap HUD** — a slim vertical bar (`effects.draw_minimap`) tracking height only (this is a vertical climb, so height IS progress): blue dot for the player, red for the cop, gold diamond for the goal, all mapped from world y onto the bar via `world_h`. ✅ done
 11. **Win ("photo captured") and lose ("caught") screens** — win is now a dedicated full-screen `STATE_WIN` (`screens.run_win_screen`) using `final_background.png`, reached the instant the win condition finalizes in `_run_game_frame` (replaces the old small overlay box entirely). Lose stays as the existing in-place "THE COP CAUGHT YOU!" overlay — same black-box/red-border visual language as before; no dedicated background art exists for it yet, so a full screen wasn't warranted. ✅ done
 12. **Per-difficulty leaderboard (local JSON)** — `add_score(name, time, difficulty)` tags each entry and trims each difficulty's bucket to its own top 10 independently (a Hard run can't bump an Easy run off the list). Scoreboard screen (`run_scoreboard`) is now tabbed — 1/2/3 switches between EASY/MEDIUM/HARD without leaving the screen, opens on whichever difficulty was just played (`self.difficulty` passed in from `GameApp`). ✅ done
-13. **Final art/audio pass + verify both build targets** — desktop (`python main.py` / PyInstaller) and web (`python -m pygbag --build main.py`), following the reference repo's itch.io packaging steps.
+13. **Final art/audio pass + verify both build targets** — jump-pose sprites wired in as a 4th animation state (player + cop, shown while airborne); font/music already landed. Desktop build (PyInstaller) fully verified: builds clean, launches, runs stably with all assets bundled. Web build (pygbag) verified end-to-end for packaging — found and fixed two real bugs along the way (see "Web build gotchas" below); final HTML/JS wrapper generation needs a real internet connection to pygbag's CDN, which the dev sandbox this was built in doesn't have, so that last step should be re-run on a normal machine (should now succeed cleanly). ✅ done
 14. **Online leaderboard via Supabase** — added after the game is fully working locally. Migrates/extends the step-12 leaderboard to a live Supabase-backed scoreboard. User is new to Supabase, so this step introduces concepts as they come up (project setup, schema, Python client) rather than all at once.
 
 ---
@@ -66,12 +66,25 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 - `load_scores_by_difficulty(difficulty)` returns just one bucket, fastest first — what the scoreboard screen actually reads from.
 - Scoreboard screen (`run_scoreboard`) is tabbed: 1/2/3 switches EASY/MEDIUM/HARD live, active tab highlighted in yellow, no need to leave the screen. Opens on `initial_difficulty` (the difficulty just played, passed in from `GameApp.difficulty`) rather than always defaulting to one tab.
 
+### Jump-pose sprites (Step 13)
+
+- 4th animation pose for both `Player` and `Cop`: `player_jump_left/right.png`, `cop_jump_left/right.png`. Shown whenever `not on_ground` (covers both rising and falling — there's only one pose per direction, no separate fall pose). For the cop, an in-progress cheat hop also shows the jump pose, since a hop reads visually as a leap toward the player.
+- Falls back to the run sprite if the jump image is ever missing (unlike the 3 base poses, which still hard-fail the whole game if missing) — an added-on pose isn't something the game was originally built to require.
+
+### Web build gotchas (found verifying Step 13, worth remembering)
+
+- **pygbag validates every file under `assets/`, not just what the code loads.** A leftover source mp3 (kept around after converting to `theme_music.ogg`) made the whole build fail with "unsupported format," even though nothing in the game ever loads it.
+- **pygbag's `pygbag.ini` parser hard-rejects any `ignorefiles`/`ignoredirs` entry containing a space** — so a space-containing filename can't be excluded by listing it directly; it has to live in an excluded *directory* instead.
+- **Real asset filenames with spaces also break the actual packer**, not just the ignore-list parser — this is what "renaming assets" should have already covered, but the jump-pose sprites were added later (Step 13) and still had their original spaced names (`jumping left.png`, `Cop Jumping left.png`, etc.) until this step renamed them to match the project's existing snake_case convention.
+- **Fix applied:** renamed the 4 jump sprites to snake_case (load-bearing, code needed the new names); moved the remaining unused/source files that still have spaces in their names (`SAMBA TEMPERADO 2015.mp3`, `Star Crush.otf`, `standing still right.png`, `1001fonts-star-crush-eula.txt`) into a new `assets/unused/` subfolder, excluded wholesale via `pygbag.ini`'s `ignoredirs`.
+
 ---
 
 ## Assets (in `assets/`, real art as of this step)
 
 - `background.png`, `first_screen.png`, `menu_background.png`, `scoreboard_background.png`, `final_background.png` — see `assets/README.md` for what each is used for.
-- Player sprite set (tourist/photographer): `player_idle.png`, `player_run_left/right.png`.
-- Cop sprite set: `cop_idle.png`, `cop_run_left/right.png`.
-- Still needed: `arcade_font.ttf`, `theme_music.ogg`, optional `siren.ogg` / `camera_shutter.ogg` SFX.
+- Player sprite set (tourist/photographer): `player_idle.png`, `player_run_left/right.png`, `player_jump_left/right.png`.
+- Cop sprite set: `cop_idle.png`, `cop_run_left/right.png`, `cop_jump_left/right.png`.
+- Font (`Star Crush.ttf`) and background music (`theme_music.ogg`, converted from mp3 at 44100 Hz) are in. Optional `siren.ogg` / `camera_shutter.ogg` stingers were considered and explicitly skipped — user decided not to add them, so Step 13 doesn't need to wait on any more audio assets.
+- `assets/unused/` holds files that exist for reference but aren't loaded by the game and (in the mp3's case) would actively break the web build if left in `assets/` directly — see `assets/README.md`.
 - Sitting unused for now (see `assets/README.md`): jump-pose sprites (deferred to Step 13 polish), a duplicate idle image.
