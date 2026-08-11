@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import pygame
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 #Used for the collision detection
 from .platform import Platform
 #Used for the world gameplay (screen transformation)
@@ -33,32 +33,24 @@ STEER_DEADZONE = 6
 #improvement resets nothing, and the stuck timer keeps climbing
 PROGRESS_EPSILON = 20
 
-#--- "Cheat" hop (see Cop._start_hop / Cop._advance_hop) ---
+#--- Stuck fallback: breaking a platform (see Cop._break_nearest_platform) ---
 #Since the level has no fixed layout (the player builds their own platforms
 #live), the cop can't rely on a precomputed path the way an early version of
 #this AI did. Instead it always just heads toward wherever the player
-#currently is, jumping normally when that's reachable. If it's stuck (no
-#platform to jump to) longer than its patience allows, it cheats: a
-#guaranteed hop that drives its position directly toward the player over a
-#short fixed duration — no velocity, no gravity, no collision math to get
-#wrong. Reads as "the cop cheats," which fits the theme anyway (a dirty cop
-#cutting corners to catch you), and it can never fail to land.
-#Balance note: a real player jump (jump_strength=650, gravity=1400) takes
-#~0.93s for its full arc and covers ~151px of rise. The original hop values
-#here (0.35s / 130px) covered almost that much height in barely a third of
-#the time — it read as an outright teleport rather than a leap, and felt
-#overpowered. Slower duration + a slightly lower rise cap keeps the hop
-#feeling like a decisive, cheaty shortcut (still faster than a real jump)
-#without trivializing whatever the player just built.
-HOP_DURATION = 0.65
-#Cap on how high a single cheat hop climbs — keeps it feeling like a leap
-#toward the player rather than an instant teleport onto them
-MAX_HOP_RISE = 110
-#A small platform is still placed under the landing spot so the cop has
-#normal solid ground the instant the hop ends
-HOP_PAD_W, HOP_PAD_H = 80, 16
+#currently is, jumping normally when that's reachable.
+#
+#An earlier version of this AI used a "cheat hop" here instead — teleporting
+#directly to a point near the player when stuck. Player feedback was that it
+#felt overpowered even after toning the timing down, so it was replaced
+#entirely: now, if the cop is stuck without real upward progress longer than
+#its patience allows, it destroys the nearest player-built platform instead
+#of teleporting past the obstacle. This is a genuine last resort (patience
+#is long — see COP_PATIENCE_BY_DIFFICULTY), and real jumps are always tried
+#first; it exists purely so a genuinely unreachable gap can't leave the cop
+#stuck forever, while staying visible and fair rather than magic. The floor
+#itself (platforms[0]) can never be broken.
 #Safety cap so a pathological stall can't repeat forever — fails soft
-MAX_CHEAT_HOPS = 200
+MAX_PLATFORM_BREAKS = 100
 
 
 def get_spawn_position(player_spawn: Tuple[int, int], difficulty: str) -> Tuple[int, int]:
@@ -81,10 +73,11 @@ class Cop:
     (reaction-delayed) position, jumping when they're above and there's
     ground to jump to.
 
-    Unlike the player, the cop can cheat: since there's no fixed layout to
-    fall back on, if it's stuck without a platform to jump to for longer
-    than its patience allows, it performs a guaranteed "cheat hop" toward
-    the player (see _start_hop), so it's never permanently stuck.
+    Unlike the player, the cop has a last-resort fallback: since there's no
+    fixed layout to rely on, if it's stuck without real upward progress for
+    longer than its patience allows, it destroys the nearest player-built
+    platform (see _break_nearest_platform) so it's never permanently stuck.
+    Real jumps are always tried first — this is rare, not routine.
     """
     def __init__(self, x: int, y: int, difficulty: str):
         #cop collision rectangle used for physics and collisions (same size as the player)
@@ -106,24 +99,17 @@ class Cop:
         self._reaction_timer = 0.0
         self._known_player_x = x
         #Tracks the best (smallest) centery reached, and how long it's been
-        #stuck without meaningfully improving on that — drives the cheat-hop
-        #fallback in ai_try_jump
+        #stuck without meaningfully improving on that — drives the
+        #platform-breaking fallback in ai_try_jump
         self._best_centery = float(self.rect.centery)
         self._stuck_timer = 0.0
-        #The cop's current landing pad, if any — a list of at most 1
-        self.created_platforms: List[Platform] = []
-        #Lifetime count of cheat hops used this run, capped defensively so a
-        #pathological stall can't repeat forever
-        self._hops_used = 0
-
-        #Cheat-hop state — while active, position is driven directly by
-        #_advance_hop instead of normal steering/physics
-        self._hop_active = False
-        self._hop_start_x = 0.0
-        self._hop_start_y = 0.0
-        self._hop_target_x = 0.0
-        self._hop_target_y = 0.0
-        self._hop_elapsed = 0.0
+        #Lifetime count of platforms broken this run, capped defensively so
+        #a pathological stall can't repeat forever
+        self._platforms_broken = 0
+        #Set to the rect of whatever platform was just destroyed, for one
+        #frame only — GameApp reads this right after calling ai_try_jump to
+        #spawn a visual "break" effect, then it's cleared again next call
+        self.last_broken_platform_rect: Optional[pygame.Rect] = None
 
         #Build the file paths for the cop's sprites
         still_path = os.path.join(ASSETS_DIR, COP_STILL_FILE)
@@ -166,18 +152,12 @@ class Cop:
         self._known_player_x = x
         self._best_centery = float(self.rect.centery)
         self._stuck_timer = 0.0
-        self.created_platforms = []
-        self._hops_used = 0
-        self._hop_active = False
-        self._hop_elapsed = 0.0
+        self._platforms_broken = 0
+        self.last_broken_platform_rect = None
 
     #Decides which direction to move this frame: always straight at the
-    #player's (reaction-delayed) x. Does nothing while a cheat hop is in
-    #progress — position is driven by _advance_hop instead.
+    #player's (reaction-delayed) x.
     def ai_steer(self, dt: float, player_rect: pygame.Rect) -> None:
-        if self._hop_active:
-            return
-
         #Reaction delay: only refresh the cop's "known" player position every
         #reaction_delay seconds, instead of reacting instantly every frame
         self._reaction_timer += dt
@@ -186,8 +166,8 @@ class Cop:
             self._reaction_timer = 0.0
 
         #Track upward progress — ai_try_jump uses how long it's been since
-        #real progress to decide when to stop attempting normal jumps and
-        #cheat with a guaranteed hop instead
+        #real progress to decide when to give up on normal jumps and break
+        #a blocking platform instead
         if self.rect.centery < self._best_centery - PROGRESS_EPSILON:
             self._best_centery = self.rect.centery
             self._stuck_timer = 0.0
@@ -207,55 +187,40 @@ class Cop:
     #Jumps when the player is above the cop and it's on solid ground —
     #mirrors Player.try_jump, but the trigger is "the player is above me"
     #instead of a key press. If we've been stuck without making real upward
-    #progress longer than our patience allows, cheat with a guaranteed hop
-    #toward the player instead of gambling on another jump landing anywhere.
-    def ai_try_jump(self, player_rect: pygame.Rect) -> None:
-        if self._hop_active:
-            return
+    #progress longer than our patience allows (a genuine last resort — see
+    #COP_PATIENCE_BY_DIFFICULTY), destroy the nearest player-built platform
+    #instead of gambling on another jump landing anywhere.
+    def ai_try_jump(self, player_rect: pygame.Rect, platforms: List[Platform]) -> None:
+        #Cleared every call — only set for the one frame a break actually happens
+        self.last_broken_platform_rect = None
         needs_to_climb = player_rect.top < self.rect.top - CLIMB_TOLERANCE
         if not (needs_to_climb and self.on_ground):
             return
-        if self._stuck_timer >= self.patience and self._hops_used < MAX_CHEAT_HOPS:
-            #Hop toward the player, but capped — a leap toward them, not an
-            #instant teleport on top of them
-            target_y = max(player_rect.top, self.rect.top - MAX_HOP_RISE)
-            self._start_hop(self._known_player_x, target_y)
+        if self._stuck_timer >= self.patience and self._platforms_broken < MAX_PLATFORM_BREAKS:
+            self._break_nearest_platform(platforms)
             return
         self.vy = -self.jump_strength
         self.on_ground = False
 
-    #Begins a guaranteed cheat hop straight to the given target — position
-    #is driven directly by _advance_hop over HOP_DURATION, bypassing normal
-    #jump physics entirely so it can never fail to land.
-    def _start_hop(self, target_x: float, target_y: float) -> None:
-        self._hop_active = True
-        self._hop_start_x, self._hop_start_y = float(self.rect.x), float(self.rect.y)
-        self._hop_target_x = target_x - PLAYER_W / 2
-        self._hop_target_y = target_y - PLAYER_H
-        self._hop_elapsed = 0.0
-        self.facing_right = target_x >= self.rect.centerx
-        self.on_ground = False
-        self.vx = 0.0
-        self.vy = 0.0
-        #Solid ground under the landing spot, in case it doesn't line up
-        #exactly with a real platform's edges
-        pad_x = int(target_x - HOP_PAD_W / 2)
-        self.created_platforms = [Platform(pad_x, int(target_y), HOP_PAD_W, HOP_PAD_H)]
-        self._hops_used += 1
+    #Destroys the player-built platform nearest to the cop (never the floor,
+    #platforms[0]) — the last-resort fallback for a gap real jumps can't
+    #clear. Resets the stuck timer so it gets a full fresh shot at climbing
+    #normally afterward, rather than potentially chain-breaking more
+    #platforms the instant this one turns out not to have been enough.
+    def _break_nearest_platform(self, platforms: List[Platform]) -> None:
+        candidates = platforms[1:]
+        if not candidates:
+            return
 
-    #Advances an in-progress cheat hop by dt, interpolating position toward
-    #the target and finishing (grounded, ready for normal physics again)
-    #once HOP_DURATION has elapsed.
-    def _advance_hop(self, dt: float) -> None:
-        self._hop_elapsed += dt
-        t = min(1.0, self._hop_elapsed / HOP_DURATION)
-        self.rect.x = int(self._hop_start_x + (self._hop_target_x - self._hop_start_x) * t)
-        self.rect.y = int(self._hop_start_y + (self._hop_target_y - self._hop_start_y) * t)
-        if t >= 1.0:
-            self._hop_active = False
-            self.on_ground = True
-            self.vx = 0.0
-            self.vy = 0.0
+        def dist2(p: Platform) -> float:
+            cx, cy = p.rect.center
+            return (cx - self.rect.centerx) ** 2 + (cy - self.rect.centery) ** 2
+
+        nearest = min(candidates, key=dist2)
+        self.last_broken_platform_rect = nearest.rect.copy()
+        platforms.remove(nearest)
+        self._platforms_broken += 1
+        self._stuck_timer = 0.0
 
     #prevent the cop from mouving outside from the horizontal world bounds
     def clamp_to_world_x(self, world_w: int) -> None:
@@ -264,11 +229,10 @@ class Cop:
         if self.rect.right > world_w:
             self.rect.right = world_w
 
-    #Chooses which sprite to display depending on movement direction. Airborne
-    #covers both a normal jump and a cheat hop (a hop reads visually as a leap
-    #toward the player, so the jump pose fits it too)
+    #Chooses which sprite to display depending on movement direction and
+    #whether we're airborne (jumping or falling)
     def _pick_sprite(self) -> pygame.Surface:
-        if self._hop_active or not self.on_ground:
+        if not self.on_ground:
             return self.sprite_jump_r if self.facing_right else self.sprite_jump_l
         moving = abs(self.vx) > 1e-3
         if not moving:
@@ -288,23 +252,15 @@ class Cop:
         screen.blit(sprite, sprite_rect)
 
     #Applies gravity, updates position, and handles collision detection —
-    #identical two-pass approach to Player.move_and_collide, except the cop
-    #also collides with its own landing pad (and any platforms the player
-    #has built — the same shared list is passed in), and skips physics
-    #entirely while a cheat hop is driving its position directly.
+    #identical two-pass approach to Player.move_and_collide (same shared
+    #platform list the player builds onto and the cop can break).
     def move_and_collide(self, dt: float, platforms: List[Platform]) -> None:
-        if self._hop_active:
-            self._advance_hop(dt)
-            return
-
-        all_platforms = platforms + self.created_platforms
-
         self.vy += self.gravity * dt
         self.on_ground = False
 
         #Horizontal movement
         self.rect.x += int(self.vx * dt)
-        for p in all_platforms:
+        for p in platforms:
             if self.rect.colliderect(p.rect):
                 if self.vx > 0:
                     self.rect.right = p.rect.left
@@ -313,7 +269,7 @@ class Cop:
 
         #Vertical movement
         self.rect.y += int(self.vy * dt)
-        for p in all_platforms:
+        for p in platforms:
             if self.rect.colliderect(p.rect):
                 if self.vy > 0:
                     self.rect.bottom = p.rect.top
@@ -329,7 +285,7 @@ class Cop:
         #colliding. Nudge a probe rect down a couple pixels to catch that.
         if not self.on_ground and self.vy >= 0:
             probe = self.rect.move(0, 2)
-            for p in all_platforms:
+            for p in platforms:
                 if probe.colliderect(p.rect):
                     self.on_ground = True
                     break

@@ -80,11 +80,12 @@ GOAL_W, GOAL_H = 40, 60
 #Platform colors (stone style, placeholder until real Colosseum art lands)
 PLATFORM_FILL = (140, 90, 45)
 PLATFORM_OUTLINE = (0, 0, 0)
-#Tint for the cop's own cheat-hop landing pads (see cop.py) — a reddish tone
-#matching its minimap dot, so it's visually obvious the COP built this one,
-#not the player
-COP_PLATFORM_FILL = (150, 60, 60)
-COP_PLATFORM_OUTLINE = (60, 10, 10)
+#Brief red flash + crack marks shown where the cop just destroyed a
+#player-built platform (its last-resort fallback when stuck too long — see
+#cop.py's _break_nearest_platform), so it reads as a visible, fair event
+#instead of a platform just silently vanishing
+PLATFORM_BREAK_COLOR = (255, 60, 60)
+PLATFORM_BREAK_DURATION = 0.4
 #Radius used to draw the glowing goal ring (for visual effect)
 GOAL_RING_R = 14
 
@@ -145,15 +146,16 @@ COP_START_GAP_BY_DIFFICULTY = {
 }
 #How long (seconds) the cop keeps attempting a normal jump toward the player
 #before giving up and "cheating" — a guaranteed hop toward them (see cop.py).
-#Hard still cheats soonest, Easy tries for a while first — but Hard's
-#original 0.3s let it start hopping almost immediately, chaining hops back
-#to back and feeling unbeatable rather than "genuinely struggling first".
-#Bumped up across the board so every difficulty gives real jump attempts a
-#fair shot before resorting to the cheat.
+#This is now a genuine LAST RESORT, not a routine catch-up tool: real jumps
+#are always tried first and remain the cop's primary way of climbing, and
+#the cop only ever cheats once it's been stuck without real upward progress
+#for a long stretch. It still exists so a cleverly-built, genuinely
+#unreachable gap can't leave the cop stuck forever — but it should be rare,
+#not something you see every time you climb.
 COP_PATIENCE_BY_DIFFICULTY = {
-    DIFFICULTY_EASY: 3.0,
-    DIFFICULTY_MEDIUM: 1.6,
-    DIFFICULTY_HARD: 0.6,
+    DIFFICULTY_EASY: 6.0,
+    DIFFICULTY_MEDIUM: 4.0,
+    DIFFICULTY_HARD: 2.5,
 }
 
 #Supabase settinigs added in the game (live dynamic database)

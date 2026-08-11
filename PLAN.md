@@ -38,13 +38,12 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 ### Cop AI chaser
 - Own `pygame.Rect`, vx/vy, gravity, jump, idle/run-left/run-right/jump sprites, same two-pass move-and-collide as `Player`.
 - No precomputed path — always steers toward the player's (reaction-delayed) x, jumps when the player is above and it's grounded.
-- If stuck without real upward progress longer than its per-difficulty *patience*, performs a "cheat hop": position interpolated directly to a point toward the player (capped rise) over a fixed duration, bypassing jump physics entirely so it can never fail to land. A small landing pad is placed under the hop's destination — and now actually drawn (tinted red via `COP_PLATFORM_FILL/OUTLINE`), so it's visible when the cop builds it instead of only existing for collision.
-- **Hop rebalance** (post-launch player feedback: "the teleportation mechanic is a bit overpowered"): `HOP_DURATION` was `0.35`, `MAX_HOP_RISE` was `130` — a real player jump takes ~0.93s to cover ~151px, so the original hop covered almost that much height in a third of the time and read as an outright teleport. Now `HOP_DURATION = 0.65`, `MAX_HOP_RISE = 110` — still faster than a real jump (it's still "cheating"), but no longer instant.
+- **Stuck fallback — platform-breaking, not teleporting** (replaced the original "cheat hop" mechanic entirely after player feedback that a position-teleport felt overpowered, even after an earlier rebalance pass toned its speed/height down). If stuck without real upward progress longer than its per-difficulty *patience*, the cop now destroys the nearest player-built platform (`Cop._break_nearest_platform`) instead — the floor (`platforms[0]`) can never be targeted. This is a genuine last resort, not a routine catch-up tool: patience is long (see below), real jumps are always attempted first, and breaking one platform resets the stuck timer so the cop gets a fresh full-patience shot at climbing normally before it would ever consider breaking another. A brief red flash + crack mark (`GameApp.break_effects`, `PLATFORM_BREAK_COLOR/DURATION`) shows where the platform used to be, so it reads as a visible, fair event instead of a platform silently vanishing.
 - Difficulty tuning (relative to player's `speed=260`, `jump_strength=650`, `gravity=1400`):
-  - **Easy**: 180 px/s, 0.6s reaction delay, 220px starting gap, 3.0s patience before cheating.
-  - **Medium**: 260 px/s, 0.3s reaction delay, 140px starting gap, 1.6s patience.
-  - **Hard**: 310 px/s, 0.1s reaction delay, 80px starting gap, 0.6s patience.
-  - (Patience raised across the board — Hard's original 0.3s let it start cheat-hopping almost immediately and chain hops back to back; every difficulty now gives real jump attempts a fairer shot first.)
+  - **Easy**: 180 px/s, 0.6s reaction delay, 220px starting gap, 6.0s patience before breaking a platform.
+  - **Medium**: 260 px/s, 0.3s reaction delay, 140px starting gap, 4.0s patience.
+  - **Hard**: 310 px/s, 0.1s reaction delay, 80px starting gap, 2.5s patience.
+  - (Patience raised substantially across the board once the mechanic became "rare last resort" rather than "routine catch-up" — these numbers mean minutes can pass without the cop ever needing to break anything, as long as real jumps keep making progress.)
 - Lose: `cop.rect.colliderect(player.rect)` → `STATE_GAMEOVER`.
 
 ### Ground-probe fix (sprite flicker, post-launch player feedback)

@@ -14,7 +14,7 @@ from .settings import (
     STATE_SCOREBOARD, STATE_GAME, STATE_WIN,
     DIFFICULTY_MEDIUM,
     WINDOW_TITLE, CAMERA_ZOOM,
-    COP_PLATFORM_FILL, COP_PLATFORM_OUTLINE,
+    PLATFORM_BREAK_COLOR, PLATFORM_BREAK_DURATION,
 )
 #Import the helper functions + game systems from other python modules
 from .utils import safe_load_image, get_readable_font, format_time
@@ -111,6 +111,9 @@ class GameApp:
         #Create the Cop object, spawned behind the player by a difficulty-dependent gap
         cop_x, cop_y = get_cop_spawn_position((self.spawn_x, self.spawn_y), self.difficulty)
         self.cop = Cop(cop_x, cop_y, self.difficulty)
+        #Brief visual flashes marking where the cop just destroyed a platform
+        #(its last-resort fallback) — each entry is [world Rect, seconds left]
+        self.break_effects: List[List] = []
 
     def reset_run(self, clear_platforms: bool) -> None:
         """
@@ -127,6 +130,7 @@ class GameApp:
         #have changed since the last run (fresh difficulty-select choice)
         cop_x, cop_y = get_cop_spawn_position((self.spawn_x, self.spawn_y), self.difficulty)
         self.cop.reset(cop_x, cop_y, self.difficulty)
+        self.break_effects = []
         if clear_platforms:
             self.platforms = build_platforms(self.world_w, self.world_h)
 
@@ -290,9 +294,18 @@ class GameApp:
             self.player.clamp_to_world_x(self.world_w)
 
             self.cop.ai_steer(dt, self.player.rect)
-            self.cop.ai_try_jump(self.player.rect)
+            self.cop.ai_try_jump(self.player.rect, self.platforms)
+            #If the cop just used its last-resort fallback and destroyed a
+            #platform, spawn a brief visual flash where it used to be
+            if self.cop.last_broken_platform_rect is not None:
+                self.break_effects.append([self.cop.last_broken_platform_rect, PLATFORM_BREAK_DURATION])
             self.cop.move_and_collide(dt, self.platforms)
             self.cop.clamp_to_world_x(self.world_w)
+
+            #Age out break-effect flashes, dropping any that have fully faded
+            for effect in self.break_effects:
+                effect[1] -= dt
+            self.break_effects = [e for e in self.break_effects if e[1] > 0]
 
             #Win condition takes priority if both happen to trigger the same
             #frame — benefit of the doubt to the player
@@ -390,11 +403,17 @@ class GameApp:
         #Draw platforms
         for p in self.platforms:
             p.draw(surface, self.camera)
-        #Draw the cop's own cheat-hop landing pad too, if it currently has
-        #one — tinted differently so it's visibly "the cop built this",
-        #not one of the player's own platforms
-        for p in self.cop.created_platforms:
-            p.draw(surface, self.camera, COP_PLATFORM_FILL, COP_PLATFORM_OUTLINE)
+        #Draw any in-progress "platform just broken by the cop" flashes —
+        #a fading red rect with a crack mark where it used to be, so the
+        #cop's last-resort fallback reads as a visible, fair event
+        for rect, remaining in self.break_effects:
+            alpha = max(0, min(255, int(255 * (remaining / PLATFORM_BREAK_DURATION))))
+            bx, by = self.camera.apply(rect.x, rect.y)
+            flash = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+            flash.fill((*PLATFORM_BREAK_COLOR, alpha))
+            pygame.draw.line(flash, (255, 255, 255, alpha), (0, 0), (rect.w, rect.h), 3)
+            pygame.draw.line(flash, (255, 255, 255, alpha), (rect.w, 0), (0, rect.h), 3)
+            surface.blit(flash, (bx, by))
         #Draw the player and the cop chasing them
         self.player.draw(surface, self.camera)
         self.cop.draw(surface, self.camera)
