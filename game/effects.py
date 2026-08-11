@@ -5,7 +5,13 @@ import pygame
 #Type hint for (x,y) position
 from typing import Tuple
 #radius used for the inner goal ring
-from .settings import GOAL_RING_R
+from .settings import (
+    GOAL_RING_R,
+    MINIMAP_W, MINIMAP_H, MINIMAP_MARGIN, MINIMAP_DOT_R,
+    MINIMAP_BG_COLOR, MINIMAP_BORDER_COLOR,
+    MINIMAP_PLAYER_COLOR, MINIMAP_COP_COLOR, MINIMAP_GOAL_COLOR,
+)
+from .utils import clamp
 
 def draw_goal_glow(screen: pygame.Surface, pos: Tuple[int, int]) -> None:
     """
@@ -41,3 +47,48 @@ def draw_goal_glow(screen: pygame.Surface, pos: Tuple[int, int]) -> None:
     pygame.draw.circle(screen, (0, 255, 0), (x, y), inner_r, 3)
     #Small center dot for visual detail
     pygame.draw.circle(screen, (200, 255, 220), (x, y), 3)
+
+def draw_minimap(
+    screen: pygame.Surface,
+    virtual_w: int,
+    world_h: int,
+    player_y: float,
+    cop_y: float,
+    goal_y: float,
+) -> None:
+    """
+    Draws a slim vertical progress bar in the top-right corner showing how
+    high up the player and cop currently are, plus where the goal sits.
+    This game is climbed vertically, so height IS the progress — the bar
+    only tracks y, not x.
+    """
+    bar_x = virtual_w - MINIMAP_MARGIN - MINIMAP_W
+    bar_y = MINIMAP_MARGIN
+    bar_rect = pygame.Rect(bar_x, bar_y, MINIMAP_W, MINIMAP_H)
+
+    #Semi-transparent backing so the bar stays readable over any part of the background
+    backing = pygame.Surface((MINIMAP_W, MINIMAP_H), pygame.SRCALPHA)
+    backing.fill(MINIMAP_BG_COLOR)
+    screen.blit(backing, (bar_x, bar_y))
+    pygame.draw.rect(screen, MINIMAP_BORDER_COLOR, bar_rect, 2)
+
+    #Maps a world y-coordinate onto a y position along the bar (top = world top)
+    def y_to_bar(world_y: float) -> int:
+        frac = clamp(world_y / world_h, 0.0, 1.0)
+        return bar_y + int(frac * MINIMAP_H)
+
+    cx = bar_x + MINIMAP_W // 2
+
+    #Goal marker drawn as a small diamond so it reads differently from the round dots
+    gy = y_to_bar(goal_y)
+    pygame.draw.polygon(
+        screen, MINIMAP_GOAL_COLOR,
+        [(cx - 8, gy), (cx, gy - 6), (cx + 8, gy), (cx, gy + 6)],
+    )
+
+    #Cop drawn before the player so the player's dot stays on top if they overlap
+    cy = y_to_bar(cop_y)
+    pygame.draw.circle(screen, MINIMAP_COP_COLOR, (cx, cy), MINIMAP_DOT_R)
+
+    py = y_to_bar(player_y)
+    pygame.draw.circle(screen, MINIMAP_PLAYER_COLOR, (cx, py), MINIMAP_DOT_R)

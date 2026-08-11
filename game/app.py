@@ -18,7 +18,7 @@ from .settings import (
 #Import the helper functions + game systems from other python modules
 from .utils import safe_load_image, get_font, format_time
 from .scores import add_score
-from .effects import draw_goal_glow
+from .effects import draw_goal_glow, draw_minimap
 from .camera import Camera
 from .platform import Platform
 from .player import Player
@@ -381,6 +381,12 @@ class GameApp:
         hud_time = self.font_hud.render(f"TIME: {timer_text}", True, (0, 0, 0))
         surface.blit(hud_name, (20, 70))
         surface.blit(hud_time, (20, 120))
+
+        #Minimap HUD (top-right): shows player/cop height relative to the goal
+        draw_minimap(
+            surface, self.virtual_w, self.world_h,
+            self.player.rect.centery, self.cop.rect.centery, self.goal_rect.centery,
+        )
 
         #Win overlay
         if self.win and self.final_time_s is not None:

@@ -72,6 +72,20 @@ PLATFORM_FILL = (140, 90, 45)
 PLATFORM_OUTLINE = (0, 0, 0)
 #Radius used to draw the glowing goal ring (for visual effect)
 GOAL_RING_R = 14
+
+#Top-right minimap HUD (Step 10) — a slim vertical bar showing how close the
+#player and cop are to the goal, since the level is climbed vertically.
+#World y=0 (top) maps to the top of the bar, world_h (bottom/spawn) to the
+#bottom of the bar. Purely a height/progress readout, not an x-position map.
+MINIMAP_W = 18
+MINIMAP_H = 320
+MINIMAP_MARGIN = 20
+MINIMAP_DOT_R = 7
+MINIMAP_BG_COLOR = (0, 0, 0, 140)
+MINIMAP_BORDER_COLOR = (255, 255, 255)
+MINIMAP_PLAYER_COLOR = (60, 140, 255)
+MINIMAP_COP_COLOR = (220, 60, 60)
+MINIMAP_GOAL_COLOR = (255, 215, 0)
 #Window title is displayed at the top of the pygame window
 WINDOW_TITLE = "CURSUS COLOSSEI"
 
