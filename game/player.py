@@ -157,3 +157,17 @@ class Player:
                     #jumping and you hit the bottom of the platform
                     self.rect.top = p.rect.bottom
                     self.vy = 0.0
+
+        #Ground probe: colliderect only counts real overlap, not two rects
+        #just touching at an edge — so a player resting exactly on a
+        #platform's top can flicker "not grounded" on any frame where
+        #gravity's accumulated fall rounds to 0px (int() truncation) and
+        #therefore never re-touches the platform that frame. Nudging a
+        #copy of the rect down a couple pixels catches that case without
+        #actually moving the player, so on_ground reads stable while at rest.
+        if not self.on_ground and self.vy >= 0:
+            probe = self.rect.move(0, 2)
+            for p in platforms:
+                if probe.colliderect(p.rect):
+                    self.on_ground = True
+                    break

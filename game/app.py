@@ -14,6 +14,7 @@ from .settings import (
     STATE_SCOREBOARD, STATE_GAME, STATE_WIN,
     DIFFICULTY_MEDIUM,
     WINDOW_TITLE, CAMERA_ZOOM,
+    COP_PLATFORM_FILL, COP_PLATFORM_OUTLINE,
 )
 #Import the helper functions + game systems from other python modules
 from .utils import safe_load_image, get_readable_font, format_time
@@ -389,6 +390,11 @@ class GameApp:
         #Draw platforms
         for p in self.platforms:
             p.draw(surface, self.camera)
+        #Draw the cop's own cheat-hop landing pad too, if it currently has
+        #one — tinted differently so it's visibly "the cop built this",
+        #not one of the player's own platforms
+        for p in self.cop.created_platforms:
+            p.draw(surface, self.camera, COP_PLATFORM_FILL, COP_PLATFORM_OUTLINE)
         #Draw the player and the cop chasing them
         self.player.draw(surface, self.camera)
         self.cop.draw(surface, self.camera)

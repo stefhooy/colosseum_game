@@ -18,10 +18,14 @@ class Platform:
         self.rect = pygame.Rect(x, y, w, h)
 
     #Draws the platform on screen using camera transformation
-    def draw(self, screen: pygame.Surface, camera: Camera) -> None:
+    def draw(self, screen: pygame.Surface, camera: Camera, fill_color=None, outline_color=None) -> None:
         """
         The platform exists in world space,
         so we use camera.apply() to convert it into screen space.
+        fill_color/outline_color let a caller override the default stone
+        look — used to tint the cop's own cheat-hop landing pads a
+        different color so they read as "the cop built this", not the
+        player's own platforms.
         """
         #Convert world position -> screen position
         x, y = camera.apply(self.rect.x, self.rect.y)
@@ -30,14 +34,14 @@ class Platform:
         #This will draw the inside filled rectangle (mainly body of the platform)
         pygame.draw.rect(
             screen,
-            PLATFORM_FILL,
+            fill_color or PLATFORM_FILL,
             pygame.Rect(x, y, self.rect.w, self.rect.h),
             border_radius=radius,
         )
         #This will draw the outline of the platform
         pygame.draw.rect(
             screen,
-            PLATFORM_OUTLINE,
+            outline_color or PLATFORM_OUTLINE,
             pygame.Rect(x, y, self.rect.w, self.rect.h),
             2,
             border_radius=radius,

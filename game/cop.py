@@ -43,10 +43,17 @@ PROGRESS_EPSILON = 20
 #short fixed duration — no velocity, no gravity, no collision math to get
 #wrong. Reads as "the cop cheats," which fits the theme anyway (a dirty cop
 #cutting corners to catch you), and it can never fail to land.
-HOP_DURATION = 0.35
+#Balance note: a real player jump (jump_strength=650, gravity=1400) takes
+#~0.93s for its full arc and covers ~151px of rise. The original hop values
+#here (0.35s / 130px) covered almost that much height in barely a third of
+#the time — it read as an outright teleport rather than a leap, and felt
+#overpowered. Slower duration + a slightly lower rise cap keeps the hop
+#feeling like a decisive, cheaty shortcut (still faster than a real jump)
+#without trivializing whatever the player just built.
+HOP_DURATION = 0.65
 #Cap on how high a single cheat hop climbs — keeps it feeling like a leap
 #toward the player rather than an instant teleport onto them
-MAX_HOP_RISE = 130
+MAX_HOP_RISE = 110
 #A small platform is still placed under the landing spot so the cop has
 #normal solid ground the instant the hop ends
 HOP_PAD_W, HOP_PAD_H = 80, 16
@@ -315,3 +322,14 @@ class Cop:
                 elif self.vy < 0:
                     self.rect.top = p.rect.bottom
                     self.vy = 0.0
+
+        #Ground probe — same fix as Player.move_and_collide: colliderect
+        #alone flickers "not grounded" for a resting entity whenever a
+        #frame's fall rounds to 0px, since touching edges don't count as
+        #colliding. Nudge a probe rect down a couple pixels to catch that.
+        if not self.on_ground and self.vy >= 0:
+            probe = self.rect.move(0, 2)
+            for p in all_platforms:
+                if probe.colliderect(p.rect):
+                    self.on_ground = True
+                    break

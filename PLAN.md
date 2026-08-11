@@ -36,14 +36,19 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 ## New systems (detail)
 
 ### Cop AI chaser
-- Own `pygame.Rect`, vx/vy, gravity, jump, idle/run-left/run-right sprites, same two-pass move-and-collide as `Player`.
+- Own `pygame.Rect`, vx/vy, gravity, jump, idle/run-left/run-right/jump sprites, same two-pass move-and-collide as `Player`.
 - No precomputed path — always steers toward the player's (reaction-delayed) x, jumps when the player is above and it's grounded.
-- If stuck without real upward progress longer than its per-difficulty *patience*, performs a "cheat hop": position interpolated directly to a point toward the player (capped rise) over a fixed 0.35s, bypassing jump physics entirely so it can never fail to land. A small landing pad is placed under the hop's destination.
+- If stuck without real upward progress longer than its per-difficulty *patience*, performs a "cheat hop": position interpolated directly to a point toward the player (capped rise) over a fixed duration, bypassing jump physics entirely so it can never fail to land. A small landing pad is placed under the hop's destination — and now actually drawn (tinted red via `COP_PLATFORM_FILL/OUTLINE`), so it's visible when the cop builds it instead of only existing for collision.
+- **Hop rebalance** (post-launch player feedback: "the teleportation mechanic is a bit overpowered"): `HOP_DURATION` was `0.35`, `MAX_HOP_RISE` was `130` — a real player jump takes ~0.93s to cover ~151px, so the original hop covered almost that much height in a third of the time and read as an outright teleport. Now `HOP_DURATION = 0.65`, `MAX_HOP_RISE = 110` — still faster than a real jump (it's still "cheating"), but no longer instant.
 - Difficulty tuning (relative to player's `speed=260`, `jump_strength=650`, `gravity=1400`):
-  - **Easy**: 180 px/s, 0.6s reaction delay, 220px starting gap, 2.5s patience before cheating.
-  - **Medium**: 260 px/s, 0.3s reaction delay, 140px starting gap, 1.2s patience.
-  - **Hard**: 310 px/s, 0.1s reaction delay, 80px starting gap, 0.3s patience.
+  - **Easy**: 180 px/s, 0.6s reaction delay, 220px starting gap, 3.0s patience before cheating.
+  - **Medium**: 260 px/s, 0.3s reaction delay, 140px starting gap, 1.6s patience.
+  - **Hard**: 310 px/s, 0.1s reaction delay, 80px starting gap, 0.6s patience.
+  - (Patience raised across the board — Hard's original 0.3s let it start cheat-hopping almost immediately and chain hops back to back; every difficulty now gives real jump attempts a fairer shot first.)
 - Lose: `cop.rect.colliderect(player.rect)` → `STATE_GAMEOVER`.
+
+### Ground-probe fix (sprite flicker, post-launch player feedback)
+Player and cop both showed a "glitch/frenzy" flicker between idle and jump poses even while standing completely still. Root cause was latent since Step 1 (inherited from the reference game), just invisible until jump-pose sprites started reading `on_ground` every frame: gravity accumulates each frame, but the vertical move rounds to `int()` pixels, so on frames where the accumulated fall rounds to 0px the entity doesn't move — and pygame's `colliderect` treats two rects that are merely touching (no overlap) as NOT colliding, so `on_ground` flickers false for a frame even though nothing actually left the ground. Fixed in both `Player.move_and_collide` and `Cop.move_and_collide` with a standard "ground probe": if `on_ground` is still false after the normal collision pass and `vy >= 0`, check a copy of the rect nudged 2px down against the platform list — catches "resting exactly on top" without needing a fresh pixel of real overlap, and without actually moving the entity.
 
 ### Zoomed-out camera + minimap
 - Gameplay renders to a virtual-resolution surface `(SCREEN_W*CAMERA_ZOOM, SCREEN_H*CAMERA_ZOOM)` (`GameApp.game_surface`), then `pygame.transform.smoothscale`s onto the real window once per frame in `_run_game_frame`. Existing `draw()` methods stay unchanged — they just get called with `game_surface` instead of `screen`.

@@ -80,6 +80,11 @@ GOAL_W, GOAL_H = 40, 60
 #Platform colors (stone style, placeholder until real Colosseum art lands)
 PLATFORM_FILL = (140, 90, 45)
 PLATFORM_OUTLINE = (0, 0, 0)
+#Tint for the cop's own cheat-hop landing pads (see cop.py) — a reddish tone
+#matching its minimap dot, so it's visually obvious the COP built this one,
+#not the player
+COP_PLATFORM_FILL = (150, 60, 60)
+COP_PLATFORM_OUTLINE = (60, 10, 10)
 #Radius used to draw the glowing goal ring (for visual effect)
 GOAL_RING_R = 14
 
@@ -140,13 +145,15 @@ COP_START_GAP_BY_DIFFICULTY = {
 }
 #How long (seconds) the cop keeps attempting a normal jump toward the player
 #before giving up and "cheating" — a guaranteed hop toward them (see cop.py).
-#Hard barely tries before cheating; Easy tries for a while first, giving the
-#player more breathing room and making the cop feel like it's genuinely
-#struggling.
+#Hard still cheats soonest, Easy tries for a while first — but Hard's
+#original 0.3s let it start hopping almost immediately, chaining hops back
+#to back and feeling unbeatable rather than "genuinely struggling first".
+#Bumped up across the board so every difficulty gives real jump attempts a
+#fair shot before resorting to the cheat.
 COP_PATIENCE_BY_DIFFICULTY = {
-    DIFFICULTY_EASY: 2.5,
-    DIFFICULTY_MEDIUM: 1.2,
-    DIFFICULTY_HARD: 0.3,
+    DIFFICULTY_EASY: 3.0,
+    DIFFICULTY_MEDIUM: 1.6,
+    DIFFICULTY_HARD: 0.6,
 }
 
 #Supabase settinigs added in the game (live dynamic database)
