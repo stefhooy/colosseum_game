@@ -98,6 +98,7 @@ STATE_DIFFICULTY = "difficulty"
 STATE_MAP_PREVIEW = "map_preview"
 STATE_SCOREBOARD = "scoreboard"
 STATE_GAME = "game"
+STATE_WIN = "win"
 
 #Difficulty levels — chosen on the difficulty-select screen, stored on GameApp,
 #and used to tune the Cop AI (Step 7) and to pick which leaderboard bucket a

@@ -10,6 +10,7 @@ from .settings import (
     FIRST_SCREEN_FILE,
     MENU_BG_FILE,
     SCOREBOARD_BG_FILE,
+    FINAL_BG_FILE,
     FPS,
     SCREEN_W, SCREEN_H,
     STATE_SPLASH,
@@ -257,6 +258,52 @@ async def run_scoreboard(screen: pygame.Surface, clock: pygame.time.Clock) -> st
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
 
+
+#Runs the dedicated "photo captured" win screen (shown once instead of the small
+#in-game overlay, now that real art exists for it)
+async def run_win_screen(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    player_name: str,
+    final_time_s: float,
+) -> str:
+    """
+    Full-screen "PHOTO CAPTURED!" moment using final_background.png. Returns:
+    - "quit" if the window is closed
+    - "restart" if R is pressed (caller resets the run and clears platforms)
+    - STATE_MENU if ESC is pressed
+    - STATE_SCOREBOARD if S is pressed
+    """
+    final_bg = safe_load_image(os.path.join(ASSETS_DIR, FINAL_BG_FILE), convert_alpha=False)
+    font_title = get_font(110)
+    font_body = get_font(50)
+    font_hint = get_font(36)
+
+    while True:
+        _ = clock.tick(FPS) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return "restart"
+                if event.key == pygame.K_ESCAPE:
+                    return STATE_MENU
+                if event.key == pygame.K_s:
+                    return STATE_SCOREBOARD
+
+        if final_bg:
+            scaled = pygame.transform.smoothscale(final_bg, (SCREEN_W, SCREEN_H))
+            screen.blit(scaled, (0, 0))
+        else:
+            screen.fill((10, 10, 25))
+
+        draw_center_text(screen, font_title, "PHOTO CAPTURED!", 130, (255, 255, 255))
+        draw_center_text(screen, font_body, f"{player_name} — {format_time(final_time_s)}", 280, (255, 255, 255))
+        draw_center_text(screen, font_hint, "R RESTART  |  ESC MENU  |  S SCOREBOARD", SCREEN_H - 90, (255, 255, 0))
+
+        pygame.display.flip()
+        await asyncio.sleep(0)  #yield to browser each frame
 
 #Runs the pre-game map preview screen (shown after name input, before the run timer starts)
 async def run_map_preview(

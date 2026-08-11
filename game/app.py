@@ -11,7 +11,7 @@ from .settings import (
     BACKGROUND_FILE,
     DEFAULT_PLAT_W, DEFAULT_PLAT_H,
     STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
-    STATE_SCOREBOARD, STATE_GAME,
+    STATE_SCOREBOARD, STATE_GAME, STATE_WIN,
     DIFFICULTY_MEDIUM,
     WINDOW_TITLE, CAMERA_ZOOM,
 )
@@ -26,7 +26,7 @@ from .cop import Cop, get_spawn_position as get_cop_spawn_position
 from .level import build_platforms, get_spawn, get_goal_rect
 from .screens import (
     run_splash, run_menu, run_name_input, run_scoreboard,
-    run_map_preview, run_difficulty_select,
+    run_map_preview, run_difficulty_select, run_win_screen,
 )
 
 
@@ -201,6 +201,19 @@ class GameApp:
                 if next_state == "quit":
                     break
                 self.state = next_state
+            #Win state — dedicated full-screen "photo captured" moment (Step 11),
+            #reached once a run's win condition finalizes in _run_game_frame()
+            elif self.state == STATE_WIN:
+                next_state = await run_win_screen(
+                    self.screen, self.clock, self.player_name, self.final_time_s or 0.0,
+                )
+                if next_state == "quit":
+                    break
+                if next_state == "restart":
+                    self.reset_run(clear_platforms=True)
+                    self.state = STATE_GAME
+                else:
+                    self.state = next_state
             #GAMEPLAY state — runs one frame then yields to the browser
             elif self.state == STATE_GAME:
                 self._run_game_frame()
@@ -291,6 +304,9 @@ class GameApp:
                     elapsed_ms = pygame.time.get_ticks() - self.run_start_ms
                     self.final_time_s = elapsed_ms / 1000.0
                     add_score(self.player_name, self.final_time_s)
+                #Hand off to the dedicated win screen (Step 11) instead of
+                #lingering in gameplay with a small overlay
+                self.state = STATE_WIN
             #Lose condition: the cop caught the player
             elif self.cop.rect.colliderect(self.player.rect):
                 self.caught = True
@@ -317,9 +333,10 @@ class GameApp:
         #At CAMERA_ZOOM=1.0 this is a same-size scale (visually a no-op);
         #it's the seam where a future CAMERA_ZOOM > 1.0 does the actual zoom-out.
         pygame.transform.smoothscale(self.game_surface, (SCREEN_W, SCREEN_H), self.screen)
-        #If the run has ended (won or caught), grant "S" shortcut to check
-        #out the scores and see how he did
-        if (self.win and self.final_time_s is not None) or self.caught:
+        #If the player got caught, grant "S" shortcut to check out the scores.
+        #(A win no longer lingers in STATE_GAME — it hands off to STATE_WIN
+        #above, which has its own S-to-scoreboard handling in run_win_screen.)
+        if self.caught:
             if pygame.key.get_pressed()[pygame.K_s]:
                 self.state = STATE_SCOREBOARD
 
@@ -388,29 +405,11 @@ class GameApp:
             self.player.rect.centery, self.cop.rect.centery, self.goal_rect.centery,
         )
 
-        #Win overlay
-        if self.win and self.final_time_s is not None:
-            big = get_font(84)
-            small = get_font(44)
-
-            msg1 = big.render("PHOTO CAPTURED!", True, (255, 255, 255))
-            msg2 = small.render(f"YOUR TIME: {format_time(self.final_time_s)}", True, (255, 255, 255))
-            msg3 = small.render("R RESTART (CLEARS PLATFORMS) | ESC MENU | S SCOREBOARD", True, (255, 255, 255))
-            #Create the winning message board with a centered back box behind the win message(msg1)
-            box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
-            box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 80
-            box_x = (self.virtual_w - box_w) // 2
-            box_y = (self.virtual_h - box_h) // 2
-            pygame.draw.rect(surface, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
-            pygame.draw.rect(surface, (255, 255, 255), pygame.Rect(box_x, box_y, box_w, box_h), 2)
-            #Draw the message inside the box
-            surface.blit(msg1, (box_x + 40, box_y + 25))
-            surface.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
-            surface.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))
-
-        #Caught overlay — same visual language as the win overlay above, just
-        #with a red accent border. A dedicated full-screen version of this
-        #comes later (Step 11); this is the basic wired-up version for now.
+        #Caught overlay — the win side of this got promoted to a dedicated
+        #full-screen moment (run_win_screen, Step 11) since real art landed
+        #for it, but the plan keeps this one as an in-place overlay: there's
+        #no dedicated "caught" background art, so this stays the lose-state
+        #visual language (black box, red accent border).
         if self.caught:
             big = get_font(84)
             small = get_font(44)
