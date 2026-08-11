@@ -13,7 +13,7 @@ from .settings import (
     STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
     STATE_SCOREBOARD, STATE_GAME,
     DIFFICULTY_MEDIUM,
-    WINDOW_TITLE,
+    WINDOW_TITLE, CAMERA_ZOOM,
 )
 #Import the helper functions + game systems from other python modules
 from .utils import safe_load_image, get_font, format_time
@@ -59,6 +59,13 @@ class GameApp:
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
         pygame.display.set_caption(WINDOW_TITLE)
+        #Gameplay is rendered onto this off-screen "virtual" surface, then
+        #smoothscaled up to fill the real window (Step 9). At CAMERA_ZOOM=1.0
+        #the two are the same size, so this is currently a no-op scale — the
+        #pipeline is ready for whenever CAMERA_ZOOM > 1.0 is used to zoom out.
+        self.virtual_w = int(SCREEN_W * CAMERA_ZOOM)
+        self.virtual_h = int(SCREEN_H * CAMERA_ZOOM)
+        self.game_surface = pygame.Surface((self.virtual_w, self.virtual_h))
         init_audio()
         # Music is started later, after the first user interaction (splash screen),
         # to satisfy Chrome's autoplay policy and prevent glitchy/blocked audio.
@@ -70,8 +77,10 @@ class GameApp:
         #Load background and define the world size based on the image dimensions
         self.background = load_background_world()
         self.world_w, self.world_h = self.background.get_width(), self.background.get_height()
-        #Camera converts world coordinates -> screen coordinates (important for scrolling)
-        self.camera = Camera(SCREEN_W, SCREEN_H, self.world_w, self.world_h)
+        #Camera converts world coordinates -> virtual-surface coordinates (important
+        #for scrolling). It's sized to the virtual surface, not the real window,
+        #so "screen" here means the camera's own render target pre-smoothscale.
+        self.camera = Camera(self.virtual_w, self.virtual_h, self.world_w, self.world_h)
         #Spawn position where the player starts
         self.spawn_x, self.spawn_y = get_spawn(self.world_w, self.world_h)
         #Level data: starts as just the floor — climbing this game means
@@ -119,6 +128,16 @@ class GameApp:
         self.cop.reset(cop_x, cop_y, self.difficulty)
         if clear_platforms:
             self.platforms = build_platforms(self.world_w, self.world_h)
+
+    def _mouse_virtual_pos(self) -> tuple[int, int]:
+        """
+        Mouse position from pygame is in real-window pixels, but gameplay is
+        drawn on the (possibly differently-sized) virtual surface. Scale the
+        raw mouse position into virtual-surface space before feeding it to
+        the camera, so platform placement lines up with the cursor.
+        """
+        mx, my = pygame.mouse.get_pos()
+        return int(mx * CAMERA_ZOOM), int(my * CAMERA_ZOOM)
 
     async def run(self) -> None:
         """
@@ -231,8 +250,8 @@ class GameApp:
             #Mouse clicks place/remove platforms — live, while still running
             #and being chased, no pause
             if event.type == pygame.MOUSEBUTTONDOWN:
-                #convert our mouse position (screen) into world coordinates using camera offstes
-                mx, my = pygame.mouse.get_pos()
+                #convert our mouse position (screen -> virtual surface -> world) using camera offsets
+                mx, my = self._mouse_virtual_pos()
                 wx = mx + self.camera.offset_x
                 wy = my + self.camera.offset_y
                 #Left click will add a platform centered on the mouse
@@ -290,10 +309,14 @@ class GameApp:
         #endlessly downward
         if self.player.rect.top > self.world_h + 400:
             self.reset_run(clear_platforms=False)
-        #camera follows player center (world -> screen handled by camera.apply)
+        #camera follows player center (world -> virtual-surface handled by camera.apply)
         self.camera.follow(self.player.rect.centerx, self.player.rect.centery)
-        #draw everything for this frame
+        #draw everything for this frame onto the virtual surface
         self._draw()
+        #Scale the virtual surface up to the real window and present it.
+        #At CAMERA_ZOOM=1.0 this is a same-size scale (visually a no-op);
+        #it's the seam where a future CAMERA_ZOOM > 1.0 does the actual zoom-out.
+        pygame.transform.smoothscale(self.game_surface, (SCREEN_W, SCREEN_H), self.screen)
         #If the run has ended (won or caught), grant "S" shortcut to check
         #out the scores and see how he did
         if (self.win and self.final_time_s is not None) or self.caught:
@@ -304,21 +327,24 @@ class GameApp:
 
     def _draw(self) -> None:
         """
-        Draws the background, goal, platforms, player, HUD, and overlays.
-        This method does NOT update physics, it only renders visuals.
+        Draws the background, goal, platforms, player, HUD, and overlays onto
+        the virtual surface (self.game_surface), which gets smoothscaled to
+        the real window afterward in _run_game_frame. This method does NOT
+        update physics, it only renders visuals.
         """
+        surface = self.game_surface
         #Draw world background using camera offsets (creates a scrolling effect)
-        self.screen.blit(self.background, (-self.camera.offset_x, -self.camera.offset_y))
+        surface.blit(self.background, (-self.camera.offset_x, -self.camera.offset_y))
         #Draw a spawn circle marker
         sx, sy = self.camera.apply(self.spawn_x, self.spawn_y)
-        pygame.draw.circle(self.screen, (255, 165, 0), (sx, sy), 6)
+        pygame.draw.circle(surface, (255, 165, 0), (sx, sy), 6)
         #Draw goal glow effect (visual circle) at the goal's center
         gx, gy = self.camera.apply(self.goal_rect.centerx, self.goal_rect.centery)
-        draw_goal_glow(self.screen, (gx, gy))
+        draw_goal_glow(surface, (gx, gy))
 
         #Ghost/preview of the next platform's size at the mouse position —
         #always shown, since placing platforms is the core way you climb
-        mx, my = pygame.mouse.get_pos()
+        mx, my = self._mouse_virtual_pos()
         wx = mx + self.camera.offset_x
         wy = my + self.camera.offset_y
 
@@ -328,19 +354,19 @@ class GameApp:
         ghost_rect = pygame.Rect(gx2, gy2, self.plat_w, self.plat_h)
 
         ghost_r = max(2, self.plat_h // 2)
-        pygame.draw.rect(self.screen, (150, 200, 255), ghost_rect, 2, border_radius=ghost_r)
+        pygame.draw.rect(surface, (150, 200, 255), ghost_rect, 2, border_radius=ghost_r)
         #control hint, always visible during gameplay
         hud = self.font_editor.render(
             "[ ] width | -/+ height | LMB add | RMB remove | R restart",
             True,
             (0, 0, 0),)
-        self.screen.blit(hud, (20, 20))
+        surface.blit(hud, (20, 20))
         #Draw platforms
         for p in self.platforms:
-            p.draw(self.screen, self.camera)
+            p.draw(surface, self.camera)
         #Draw the player and the cop chasing them
-        self.player.draw(self.screen, self.camera)
-        self.cop.draw(self.screen, self.camera)
+        self.player.draw(surface, self.camera)
+        self.cop.draw(surface, self.camera)
 
         #HUD : player name + timer
         if self.run_start_ms is not None and self.final_time_s is None:
@@ -353,8 +379,8 @@ class GameApp:
 
         hud_name = self.font_hud.render(f"PLAYER: {self.player_name}", True, (0, 0, 0))
         hud_time = self.font_hud.render(f"TIME: {timer_text}", True, (0, 0, 0))
-        self.screen.blit(hud_name, (20, 70))
-        self.screen.blit(hud_time, (20, 120))
+        surface.blit(hud_name, (20, 70))
+        surface.blit(hud_time, (20, 120))
 
         #Win overlay
         if self.win and self.final_time_s is not None:
@@ -367,14 +393,14 @@ class GameApp:
             #Create the winning message board with a centered back box behind the win message(msg1)
             box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
             box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 80
-            box_x = (SCREEN_W - box_w) // 2
-            box_y = (SCREEN_H - box_h) // 2
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
-            pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(box_x, box_y, box_w, box_h), 2)
+            box_x = (self.virtual_w - box_w) // 2
+            box_y = (self.virtual_h - box_h) // 2
+            pygame.draw.rect(surface, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
+            pygame.draw.rect(surface, (255, 255, 255), pygame.Rect(box_x, box_y, box_w, box_h), 2)
             #Draw the message inside the box
-            self.screen.blit(msg1, (box_x + 40, box_y + 25))
-            self.screen.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
-            self.screen.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))
+            surface.blit(msg1, (box_x + 40, box_y + 25))
+            surface.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
+            surface.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))
 
         #Caught overlay — same visual language as the win overlay above, just
         #with a red accent border. A dedicated full-screen version of this
@@ -388,10 +414,10 @@ class GameApp:
             msg3 = small.render("R RESTART (CLEARS PLATFORMS) | ESC MENU | S SCOREBOARD", True, (255, 255, 255))
             box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
             box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 80
-            box_x = (SCREEN_W - box_w) // 2
-            box_y = (SCREEN_H - box_h) // 2
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
-            pygame.draw.rect(self.screen, (200, 50, 50), pygame.Rect(box_x, box_y, box_w, box_h), 2)
-            self.screen.blit(msg1, (box_x + 40, box_y + 25))
-            self.screen.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
-            self.screen.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))
+            box_x = (self.virtual_w - box_w) // 2
+            box_y = (self.virtual_h - box_h) // 2
+            pygame.draw.rect(surface, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
+            pygame.draw.rect(surface, (200, 50, 50), pygame.Rect(box_x, box_y, box_w, box_h), 2)
+            surface.blit(msg1, (box_x + 40, box_y + 25))
+            surface.blit(msg2, (box_x + 40, box_y + 25 + msg1.get_height() + 15))
+            surface.blit(msg3, (box_x + 40, box_y + 25 + msg1.get_height() + msg2.get_height() + 30))

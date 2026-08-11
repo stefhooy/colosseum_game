@@ -24,8 +24,8 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 6. **Difficulty-select screen** — Easy / Medium / Hard, wired into `GameApp`. ✅ done
 7. **Cop entity + AI chase logic** — mirrors `Player`'s rect/physics/collision; always chases the player directly, with a guaranteed cheat-hop fallback when stuck (no fixed layout to path along). ✅ done
 8. **Wire the cop into `app.py`** — cop is now updated/drawn every frame, with a `self.caught` flag (mirroring `self.win`) that freezes both entities and shows a basic "THE COP CAUGHT YOU!" overlay; a full dedicated `STATE_GAMEOVER` screen comes in Step 11 along with the dedicated win screen. ✅ done
-9. **Zoomed-out "grandiose" camera** *(next up)* — off-screen virtual-resolution surface + `smoothscale`, confirm all draw calls still align.
-10. **Top-right minimap HUD** — vertical progress bar with player/cop/goal markers.
+9. **Zoomed-out "grandiose" camera** — gameplay now renders onto an off-screen virtual surface (`game_surface`, sized `SCREEN * CAMERA_ZOOM`) which is smoothscaled to the real window every frame; all draw calls (background, platforms, player, cop, HUD, overlays) and mouse-to-world math go through it. `CAMERA_ZOOM` (settings.py) is left at `1.0` for now since `background.png` is exactly screen-sized — bumping it later reveals more world once a taller background exists. ✅ done
+10. **Top-right minimap HUD** *(next up)* — vertical progress bar with player/cop/goal markers.
 11. **Win ("photo captured") and lose ("caught") screens** — a dedicated full-screen win moment (using `final_background.png`, decided once real art arrived — not just a small overlay box) plus a lose overlay matching the existing visual language.
 12. **Per-difficulty leaderboard (local JSON)** — each score stores `difficulty`, ranked/truncated to top-10 within its own bucket; scoreboard screen shows all three (stacked or tabbed, clearly labeled, switchable without leaving the screen).
 13. **Final art/audio pass + verify both build targets** — desktop (`python main.py` / PyInstaller) and web (`python -m pygbag --build main.py`), following the reference repo's itch.io packaging steps.
@@ -46,9 +46,12 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 - Lose: `cop.rect.colliderect(player.rect)` → `STATE_GAMEOVER`.
 
 ### Zoomed-out camera + minimap
-- Render the whole scene to a virtual-resolution surface `(SCREEN_W/zoom, SCREEN_H/zoom)`, then `smoothscale` up once per frame. Existing `draw()` methods stay unchanged.
+- Gameplay renders to a virtual-resolution surface `(SCREEN_W*CAMERA_ZOOM, SCREEN_H*CAMERA_ZOOM)` (`GameApp.game_surface`), then `pygame.transform.smoothscale`s onto the real window once per frame in `_run_game_frame`. Existing `draw()` methods stay unchanged — they just get called with `game_surface` instead of `screen`.
+- `Camera` is sized to the virtual surface, not the real window, so `camera.follow`/`clamp` math is entirely in virtual-surface space.
+- Mouse position is scaled from real-window pixels to virtual-surface pixels (`GameApp._mouse_virtual_pos`) before any world-coordinate math, so platform placement still lines up with the cursor regardless of zoom.
+- `CAMERA_ZOOM = 1.0` for now (settings.py) — see note below.
 - Top-right vertical bar HUD: player (blue dot), cop (red dot), goal (gold marker), scaled to `world_h`.
-- Note: current `background.png` is exactly screen-sized (1920x1080), so there's no vertical scroll room yet — a taller background may be swapped in later.
+- Note: current `background.png` is exactly screen-sized (1920x1080), so there's no vertical scroll room yet, and `CAMERA_ZOOM > 1.0` would reveal empty space past the background's edges — the render pipeline is ready, but the zoom itself is deferred until a taller background lands.
 
 ### Live platform-building (replaces the old "fixed level" idea)
 

@@ -23,6 +23,15 @@ FPS = 60
 #entity to the world's edge. Capping dt keeps every step small and safe.
 MAX_DT = 0.05
 
+#Zoom-out factor for the gameplay camera (Step 9). Gameplay is rendered onto
+#an off-screen "virtual" surface of size (SCREEN_W*CAMERA_ZOOM, SCREEN_H*CAMERA_ZOOM),
+#then smoothscaled to fill the real window. CAMERA_ZOOM > 1.0 shows more of the
+#world at once (zoomed out, "grandiose" framing); 1.0 means no zoom at all.
+#Left at 1.0 for now because background.png is exactly screen-sized (no room
+#to scroll yet) — zooming out would just reveal empty space past its edges.
+#Bump this once a taller background lands; the render pipeline is ready for it.
+CAMERA_ZOOM = 1.0
+
 #Assets of the game (images, fonts and saved scores)
 #folder where I stored every visual elements for the game
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
