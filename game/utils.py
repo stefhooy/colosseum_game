@@ -45,7 +45,12 @@ def format_time(t: float) -> str:
 
 def get_font(size: int) -> pygame.font.Font:
     """
-    Loads an arcade TTF from assets, otherwise goes back to normal font.
+    Loads the stylized Star Crush TTF from assets, otherwise goes back to
+    normal font. This is only for short, pure-word screen titles (e.g.
+    "SCOREBOARD", "CURSUS COLOSSEI") — Star Crush is missing several ASCII
+    glyphs (!,-._?), so it can't reliably render timers, hints, typed player
+    names, or anything else with numbers/punctuation. Use get_readable_font
+    for all of that instead.
     """
     #build the full path to our font file
     font_path = os.path.join(ASSETS_DIR, ARCADE_FONT_FILE)
@@ -53,6 +58,15 @@ def get_font(size: int) -> pygame.font.Font:
     if os.path.exists(font_path):
         return pygame.font.Font(font_path, size)
     #otherwise , default system font (prevent for the game to crash)
+    return pygame.font.Font(None, size)
+
+def get_readable_font(size: int) -> pygame.font.Font:
+    """
+    Pygame's built-in default font — full ASCII coverage, used for anything
+    that needs to reliably render numbers/punctuation/arbitrary typed text:
+    timers, HUD text, hints, score lines, and the win/caught titles (both
+    contain "!", which Star Crush can't render at all).
+    """
     return pygame.font.Font(None, size)
 
 #Draws text centered horizontally on the screen at a given y position.

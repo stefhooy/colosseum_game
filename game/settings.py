@@ -23,14 +23,20 @@ FPS = 60
 #entity to the world's edge. Capping dt keeps every step small and safe.
 MAX_DT = 0.05
 
-#Zoom-out factor for the gameplay camera (Step 9). Gameplay is rendered onto
-#an off-screen "virtual" surface of size (SCREEN_W*CAMERA_ZOOM, SCREEN_H*CAMERA_ZOOM),
-#then smoothscaled to fill the real window. CAMERA_ZOOM > 1.0 shows more of the
-#world at once (zoomed out, "grandiose" framing); 1.0 means no zoom at all.
-#Left at 1.0 for now because background.png is exactly screen-sized (no room
-#to scroll yet) — zooming out would just reveal empty space past its edges.
-#Bump this once a taller background lands; the render pipeline is ready for it.
-CAMERA_ZOOM = 1.0
+#Zoom factor for the gameplay camera (Step 9). Gameplay is rendered onto an
+#off-screen "virtual" surface of size (SCREEN_W*CAMERA_ZOOM, SCREEN_H*CAMERA_ZOOM),
+#then smoothscaled to fill the real window. CAMERA_ZOOM > 1.0 shows MORE of
+#the world at once (zoomed out, things appear smaller); CAMERA_ZOOM < 1.0
+#shows LESS of the world (zoomed in, things appear bigger) — since that's
+#cropping INTO the existing screen-sized background rather than needing
+#anything beyond its edges, it works fine even though background.png is
+#exactly screen-sized (unlike zooming out, which would need a taller
+#background to avoid revealing empty space past its edges).
+#0.6 = the camera shows a 60%-sized window of the world, scaled back up
+#~1.67x — sprites/platforms read bigger, and the camera now has real room
+#to scroll/follow the player instead of the whole field being visible at
+#once. Tune this single number to taste.
+CAMERA_ZOOM = 0.6
 
 #Assets of the game (images, fonts and saved scores)
 #folder where I stored every visual elements for the game

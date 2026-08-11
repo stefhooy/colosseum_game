@@ -16,7 +16,7 @@ from .settings import (
     WINDOW_TITLE, CAMERA_ZOOM,
 )
 #Import the helper functions + game systems from other python modules
-from .utils import safe_load_image, get_font, format_time
+from .utils import safe_load_image, get_readable_font, format_time
 from .scores import add_score, add_score_online
 from .effects import draw_goal_glow, draw_minimap
 from .camera import Camera
@@ -72,8 +72,8 @@ class GameApp:
         #Used to control FPS and compute delta time (dt)
         self.clock = pygame.time.Clock()
         #Fonts used during the game (HUD + editor overlay)
-        self.font_hud = get_font(42)
-        self.font_editor = get_font(32)
+        self.font_hud = get_readable_font(42)
+        self.font_editor = get_readable_font(32)
         #Load background and define the world size based on the image dimensions
         self.background = load_background_world()
         self.world_w, self.world_h = self.background.get_width(), self.background.get_height()
@@ -419,8 +419,8 @@ class GameApp:
         #no dedicated "caught" background art, so this stays the lose-state
         #visual language (black box, red accent border).
         if self.caught:
-            big = get_font(84)
-            small = get_font(44)
+            big = get_readable_font(84)
+            small = get_readable_font(44)
 
             msg1 = big.render("THE COP CAUGHT YOU!", True, (255, 255, 255))
             msg2 = small.render(f"CAUGHT AFTER: {format_time(self.final_time_s or 0.0)}", True, (255, 255, 255))

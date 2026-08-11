@@ -22,7 +22,7 @@ from .settings import (
     DIFFICULTY_MEDIUM,
     DIFFICULTY_HARD,
 )
-from .utils import safe_load_image, get_font, draw_center_text, format_time
+from .utils import safe_load_image, get_font, get_readable_font, draw_center_text, format_time
 from .scores import load_scores_by_difficulty, load_scores_online_by_difficulty
 from .effects import draw_goal_glow
 
@@ -31,7 +31,7 @@ async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     Shows first_screen.jpg fullscreen. Any key or click advances to the menu.
     """
     img = safe_load_image(os.path.join(ASSETS_DIR, FIRST_SCREEN_FILE), convert_alpha=False)
-    font = get_font(36)
+    font = get_readable_font(36)
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -64,7 +64,7 @@ async def run_menu(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     #Font used for title and instructions
     font_title = get_font(96)
-    font_body = get_font(40)
+    font_body = get_readable_font(40)
     #Y positions for the layout to align the text easier
     TITLE_Y = 120
     LINE1_Y = 260
@@ -115,7 +115,9 @@ async def run_name_input(screen: pygame.Surface, clock: pygame.time.Clock) -> Op
     """
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     font_title = get_font(72)
-    font_body = get_font(44)
+    #Readable font, not Star Crush: this also renders whatever the player
+    #actually types, and Star Crush can't reliably render arbitrary text
+    font_body = get_readable_font(44)
     #Player name is built character by character from keyboard input
     name = ""
 
@@ -176,8 +178,8 @@ async def run_difficulty_select(screen: pygame.Surface, clock: pygame.time.Clock
     """
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     font_title = get_font(80)
-    font_option = get_font(46)
-    font_desc = get_font(30)
+    font_option = get_readable_font(46)
+    font_desc = get_readable_font(30)
 
     #Each option: (key, difficulty value, label, short description)
     options = [
@@ -236,9 +238,9 @@ async def run_scoreboard(
     #Load scoreboard background (fallback works if ever missing)
     sb_bg = safe_load_image(os.path.join(ASSETS_DIR, SCOREBOARD_BG_FILE), convert_alpha=False)
     font_title = get_font(90)
-    font_tabs = get_font(38)
-    font_body = get_font(44)
-    font_sync = get_font(26)
+    font_tabs = get_readable_font(38)
+    font_body = get_readable_font(44)
+    font_sync = get_readable_font(26)
 
     #Which difficulty tab is currently shown
     current = initial_difficulty
@@ -335,9 +337,12 @@ async def run_win_screen(
     - STATE_SCOREBOARD if S is pressed
     """
     final_bg = safe_load_image(os.path.join(ASSETS_DIR, FINAL_BG_FILE), convert_alpha=False)
-    font_title = get_font(110)
-    font_body = get_font(50)
-    font_hint = get_font(36)
+    #Readable font, not Star Crush, even for the title here — "PHOTO CAPTURED!"
+    #contains "!", one of the glyphs Star Crush doesn't have. Bigger size
+    #carries the drama instead of the stylized typeface.
+    font_title = get_readable_font(110)
+    font_body = get_readable_font(50)
+    font_hint = get_readable_font(36)
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -393,7 +398,7 @@ async def run_map_preview(
         return int(wx * scale_x), int(wy * scale_y)
 
     font_title = get_font(64)
-    font_body = get_font(38)
+    font_body = get_readable_font(38)
 
     while True:
         _ = clock.tick(FPS) / 1000.0
