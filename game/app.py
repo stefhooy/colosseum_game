@@ -17,7 +17,7 @@ from .settings import (
 )
 #Import the helper functions + game systems from other python modules
 from .utils import safe_load_image, get_font, format_time
-from .scores import add_score
+from .scores import add_score, add_score_online
 from .effects import draw_goal_glow, draw_minimap
 from .camera import Camera
 from .platform import Platform
@@ -303,7 +303,15 @@ class GameApp:
                 if self.run_start_ms is not None and self.final_time_s is None:
                     elapsed_ms = pygame.time.get_ticks() - self.run_start_ms
                     self.final_time_s = elapsed_ms / 1000.0
+                    #Local save always happens first and is never affected by
+                    #network conditions — the run's result is never lost.
                     add_score(self.player_name, self.final_time_s, self.difficulty)
+                    #Best-effort sync to the shared Supabase leaderboard, fired
+                    #off in the background so a slow/dead connection can never
+                    #stall the moment of winning (see scores.add_score_online)
+                    asyncio.ensure_future(
+                        add_score_online(self.player_name, self.final_time_s, self.difficulty)
+                    )
                 #Hand off to the dedicated win screen (Step 11) instead of
                 #lingering in gameplay with a small overlay
                 self.state = STATE_WIN

@@ -23,7 +23,7 @@ from .settings import (
     DIFFICULTY_HARD,
 )
 from .utils import safe_load_image, get_font, draw_center_text, format_time
-from .scores import load_scores_by_difficulty
+from .scores import load_scores_by_difficulty, load_scores_online_by_difficulty
 from .effects import draw_goal_glow
 
 async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
@@ -227,12 +227,18 @@ async def run_scoreboard(
     keeps its own separate top 10 — see scores.add_score). Starts on
     initial_difficulty (normally whichever difficulty was just played) and
     lets the player switch tabs with 1/2/3. Returns to the menu on ENTER or ESC.
+
+    Scores shown are the shared Supabase leaderboard when reachable, with an
+    instant local fallback (scores.json) so the screen is never blank while
+    waiting on the network, and still fully works offline. See
+    scores.load_scores_online_by_difficulty for the online side.
     """
     #Load scoreboard background (fallback works if ever missing)
     sb_bg = safe_load_image(os.path.join(ASSETS_DIR, SCOREBOARD_BG_FILE), convert_alpha=False)
     font_title = get_font(90)
     font_tabs = get_font(38)
     font_body = get_font(44)
+    font_sync = get_font(26)
 
     #Which difficulty tab is currently shown
     current = initial_difficulty
@@ -242,6 +248,12 @@ async def run_scoreboard(
         (pygame.K_2, DIFFICULTY_MEDIUM, "2-MEDIUM"),
         (pygame.K_3, DIFFICULTY_HARD, "3-HARD"),
     ]
+
+    #Seed instantly from the local file (no network wait), then kick off a
+    #background fetch of the shared online leaderboard for this tab
+    displayed_scores = load_scores_by_difficulty(current)
+    syncing = True
+    fetch_task = asyncio.ensure_future(load_scores_online_by_difficulty(current))
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -253,8 +265,24 @@ async def run_scoreboard(
                 if event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
                     return STATE_MENU
                 for key, value, _label in tabs:
-                    if event.key == key:
+                    if event.key == key and value != current:
                         current = value
+                        #Switching tabs re-seeds from local instantly and
+                        #restarts the background fetch for the new tab
+                        displayed_scores = load_scores_by_difficulty(current)
+                        syncing = True
+                        fetch_task = asyncio.ensure_future(load_scores_online_by_difficulty(current))
+
+        #Once the background fetch for the CURRENT tab finishes, swap in the
+        #online result — unless it failed (None), in which case we just keep
+        #showing the local data we already seeded above
+        if fetch_task is not None and fetch_task.done():
+            online_scores = fetch_task.result()
+            if online_scores is not None:
+                displayed_scores = online_scores
+            syncing = False
+            fetch_task = None
+
         #Drawing of the scoreboard and top 10 best scores for the current tab
         if sb_bg:
             screen.blit(sb_bg, (0, 0))
@@ -271,18 +299,21 @@ async def run_scoreboard(
             x = tabs_start_x + i * tab_gap - surf.get_width() // 2
             screen.blit(surf, (x, 190))
 
-        #load just this tab's scores from the shared JSON file
-        scores = load_scores_by_difficulty(current)
-        if not scores:
+        if not displayed_scores:
             #First time, if ever this difficulty's board is empty
             draw_center_text(screen, font_body, "NO SCORES YET. BE THE FIRST.", 300)
         else:
             #When there are scores to show for this difficulty
             start_y = 270
             line_h = 52
-            for i, s in enumerate(scores[:10], start=1):
+            for i, s in enumerate(displayed_scores[:10], start=1):
                 line = f"{i:02d}. {s['name']}  {format_time(s['time'])}"
                 draw_center_text(screen, font_body, line, start_y + (i - 1) * line_h)
+
+        #Small, unobtrusive hint while the online leaderboard is still loading —
+        #doesn't block anything, the local scores above are already visible
+        if syncing:
+            draw_center_text(screen, font_sync, "syncing online leaderboard...", 920, (180, 180, 180))
         draw_center_text(screen, font_body, "1/2/3 SWITCH DIFFICULTY  |  ENTER OR ESC TO RETURN", 970, (255, 255, 0))
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame

@@ -142,3 +142,18 @@ COP_PATIENCE_BY_DIFFICULTY = {
     DIFFICULTY_MEDIUM: 1.2,
     DIFFICULTY_HARD: 0.3,
 }
+
+#Supabase settinigs added in the game (live dynamic database)
+#The anon key below is the PUBLIC key — it's meant to be embedded in client
+#code exactly like this (that's the whole point of it existing). Security
+#comes from the Row Level Security policies on the `scores` table (read +
+#insert only, no update/delete), not from hiding this value. The SEPARATE
+#service_role/secret key must never appear here or anywhere in this project.
+SUPABASE_URL = "https://ohktexvcncybtzyohsqy.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oa3RleHZjbmN5YnR6eW9oc3F5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjczMTAsImV4cCI6MjEwMjA0MzMxMH0.0stGZI9hoMQadDNgDU0vwDf7ItfWmjfD1kr3nUeoWks"
+SUPABASE_SCORES_TABLE = "scores"
+#How long (seconds) the desktop build waits for a Supabase response before
+#giving up and falling back to the local scores.json leaderboard. The web
+#build has no equivalent timeout knob — the browser's own Fetch API handles
+#that.
+SUPABASE_REQUEST_TIMEOUT = 5
