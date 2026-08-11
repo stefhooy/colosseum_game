@@ -37,6 +37,17 @@ MAX_DT = 0.05
 #to scroll/follow the player instead of the whole field being visible at
 #once. Tune this single number to taste.
 CAMERA_ZOOM = 0.6
+#Once the camera stopped showing the whole field at once (see CAMERA_ZOOM
+#above), standing still to carefully aim a platform meant you couldn't see
+#or reach anything beyond whatever was already in view — the camera only
+#followed the player's position, and a stationary player means a
+#stationary camera. This nudges the camera toward wherever the mouse is
+#pointing (as a fraction of the mouse's offset from screen center), so
+#moving the mouse toward an edge scouts/reaches further in that direction
+#without needing to physically walk the character there. 0 = camera only
+#ever follows the player (original behavior); 1.0 = camera moves as far as
+#the mouse offset allows.
+CAMERA_MOUSE_LOOKAHEAD = 0.5
 
 #Assets of the game (images, fonts and saved scores)
 #folder where I stored every visual elements for the game

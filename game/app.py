@@ -13,7 +13,7 @@ from .settings import (
     STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
     STATE_SCOREBOARD, STATE_GAME, STATE_WIN,
     DIFFICULTY_MEDIUM,
-    WINDOW_TITLE, CAMERA_ZOOM,
+    WINDOW_TITLE, CAMERA_ZOOM, CAMERA_MOUSE_LOOKAHEAD,
     PLATFORM_BREAK_COLOR, PLATFORM_BREAK_DURATION,
 )
 #Import the helper functions + game systems from other python modules
@@ -158,10 +158,6 @@ class GameApp:
                 if next_state == "quit":
                     break
                 self.state = next_state
-                # Start music on the first user interaction (satisfies Chrome autoplay policy)
-                if not music_started:
-                    play_music()
-                    music_started = True
             #Menu state
             elif self.state == STATE_MENU:
                 next_state = await run_menu(self.screen, self.clock)
@@ -199,6 +195,15 @@ class GameApp:
                 if next_state == STATE_GAME:
                     #Timer/run only actually starts once the player leaves the map preview
                     self.reset_run(clear_platforms=True)
+                    #Music starts here too, not on the splash screen — the
+                    #chase music kicking in right as the run begins reads far
+                    #better than it playing under every menu/setup screen
+                    #beforehand. Still satisfies the "needs a user gesture"
+                    #browser autoplay rule, since this transition is itself
+                    #triggered by a keypress/click in run_map_preview.
+                    if not music_started:
+                        play_music()
+                        music_started = True
                 self.state = next_state
             #Scoreboard state
             elif self.state == STATE_SCOREBOARD:
@@ -347,8 +352,17 @@ class GameApp:
         #endlessly downward
         if self.player.rect.top > self.world_h + 400:
             self.reset_run(clear_platforms=False)
-        #camera follows player center (world -> virtual-surface handled by camera.apply)
-        self.camera.follow(self.player.rect.centerx, self.player.rect.centery)
+        #camera follows the player, nudged toward wherever the mouse is
+        #pointing so you can scout/aim ahead to build without needing to
+        #physically walk the character there first (world -> virtual-surface
+        #handled by camera.apply)
+        mx, my = self._mouse_virtual_pos()
+        lookahead_x = (mx - self.virtual_w / 2) * CAMERA_MOUSE_LOOKAHEAD
+        lookahead_y = (my - self.virtual_h / 2) * CAMERA_MOUSE_LOOKAHEAD
+        self.camera.follow(
+            self.player.rect.centerx + lookahead_x,
+            self.player.rect.centery + lookahead_y,
+        )
         #draw everything for this frame onto the virtual surface
         self._draw()
         #Scale the virtual surface up to the real window and present it.
