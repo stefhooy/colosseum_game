@@ -23,7 +23,7 @@ from .settings import (
     DIFFICULTY_HARD,
 )
 from .utils import safe_load_image, get_font, draw_center_text, format_time
-from .scores import load_scores
+from .scores import load_scores_by_difficulty
 from .effects import draw_goal_glow
 
 async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
@@ -217,44 +217,73 @@ async def run_difficulty_select(screen: pygame.Surface, clock: pygame.time.Clock
         await asyncio.sleep(0)  #yield to browser each frame
 
 #Runs the scoreboard screen
-async def run_scoreboard(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
+async def run_scoreboard(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    initial_difficulty: str = DIFFICULTY_MEDIUM,
+) -> str:
     """
-    Shows the top 10 best times stored in the JSON file and will return to the menu when ENTER or ESC is pressed
+    Shows the top 10 best times for one difficulty at a time (each difficulty
+    keeps its own separate top 10 — see scores.add_score). Starts on
+    initial_difficulty (normally whichever difficulty was just played) and
+    lets the player switch tabs with 1/2/3. Returns to the menu on ENTER or ESC.
     """
     #Load scoreboard background (fallback works if ever missing)
     sb_bg = safe_load_image(os.path.join(ASSETS_DIR, SCOREBOARD_BG_FILE), convert_alpha=False)
     font_title = get_font(90)
+    font_tabs = get_font(38)
     font_body = get_font(44)
+
+    #Which difficulty tab is currently shown
+    current = initial_difficulty
+    #(key, difficulty value, tab label)
+    tabs = [
+        (pygame.K_1, DIFFICULTY_EASY, "1-EASY"),
+        (pygame.K_2, DIFFICULTY_MEDIUM, "2-MEDIUM"),
+        (pygame.K_3, DIFFICULTY_HARD, "3-HARD"),
+    ]
 
     while True:
         _ = clock.tick(FPS) / 1000.0
-        #Input handling logic with ESC and Enter
+        #Input handling logic with ESC/Enter to leave, 1/2/3 to switch tabs
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return "quit"
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
                     return STATE_MENU
-        #Drawing of the scoreboard and top 10 best scores
+                for key, value, _label in tabs:
+                    if event.key == key:
+                        current = value
+        #Drawing of the scoreboard and top 10 best scores for the current tab
         if sb_bg:
             screen.blit(sb_bg, (0, 0))
         else:
             screen.fill((10, 10, 25))
 
         draw_center_text(screen, font_title, "SCOREBOARD", 90)
-        #load the scores from JSON file
-        scores = load_scores()
+        #Tab bar — the active difficulty is highlighted in yellow, others stay white
+        tab_gap = 260
+        tabs_start_x = SCREEN_W // 2 - tab_gap
+        for i, (_key, value, label) in enumerate(tabs):
+            color = (255, 255, 0) if value == current else (255, 255, 255)
+            surf = font_tabs.render(label, True, color)
+            x = tabs_start_x + i * tab_gap - surf.get_width() // 2
+            screen.blit(surf, (x, 190))
+
+        #load just this tab's scores from the shared JSON file
+        scores = load_scores_by_difficulty(current)
         if not scores:
-            #First time, if ever the scoreboard is empty
-            draw_center_text(screen, font_body, "NO SCORES YET. BE THE FIRST.", 240)
+            #First time, if ever this difficulty's board is empty
+            draw_center_text(screen, font_body, "NO SCORES YET. BE THE FIRST.", 300)
         else:
-            #When the scores.json file is populated
-            start_y = 220
+            #When there are scores to show for this difficulty
+            start_y = 270
             line_h = 52
             for i, s in enumerate(scores[:10], start=1):
                 line = f"{i:02d}. {s['name']}  {format_time(s['time'])}"
                 draw_center_text(screen, font_body, line, start_y + (i - 1) * line_h)
-        draw_center_text(screen, font_body, "PRESS ENTER OR ESC TO RETURN", 950, (255, 255, 0))
+        draw_center_text(screen, font_body, "1/2/3 SWITCH DIFFICULTY  |  ENTER OR ESC TO RETURN", 970, (255, 255, 0))
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
 

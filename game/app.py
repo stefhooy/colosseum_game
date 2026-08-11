@@ -197,7 +197,7 @@ class GameApp:
                 self.state = next_state
             #Scoreboard state
             elif self.state == STATE_SCOREBOARD:
-                next_state = await run_scoreboard(self.screen, self.clock)
+                next_state = await run_scoreboard(self.screen, self.clock, self.difficulty)
                 if next_state == "quit":
                     break
                 self.state = next_state
@@ -303,7 +303,7 @@ class GameApp:
                 if self.run_start_ms is not None and self.final_time_s is None:
                     elapsed_ms = pygame.time.get_ticks() - self.run_start_ms
                     self.final_time_s = elapsed_ms / 1000.0
-                    add_score(self.player_name, self.final_time_s)
+                    add_score(self.player_name, self.final_time_s, self.difficulty)
                 #Hand off to the dedicated win screen (Step 11) instead of
                 #lingering in gameplay with a small overlay
                 self.state = STATE_WIN

@@ -27,7 +27,7 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 9. **Zoomed-out "grandiose" camera** — gameplay now renders onto an off-screen virtual surface (`game_surface`, sized `SCREEN * CAMERA_ZOOM`) which is smoothscaled to the real window every frame; all draw calls (background, platforms, player, cop, HUD, overlays) and mouse-to-world math go through it. `CAMERA_ZOOM` (settings.py) is left at `1.0` for now since `background.png` is exactly screen-sized — bumping it later reveals more world once a taller background exists. ✅ done
 10. **Top-right minimap HUD** — a slim vertical bar (`effects.draw_minimap`) tracking height only (this is a vertical climb, so height IS progress): blue dot for the player, red for the cop, gold diamond for the goal, all mapped from world y onto the bar via `world_h`. ✅ done
 11. **Win ("photo captured") and lose ("caught") screens** — win is now a dedicated full-screen `STATE_WIN` (`screens.run_win_screen`) using `final_background.png`, reached the instant the win condition finalizes in `_run_game_frame` (replaces the old small overlay box entirely). Lose stays as the existing in-place "THE COP CAUGHT YOU!" overlay — same black-box/red-border visual language as before; no dedicated background art exists for it yet, so a full screen wasn't warranted. ✅ done
-12. **Per-difficulty leaderboard (local JSON)** *(next up)* — each score stores `difficulty`, ranked/truncated to top-10 within its own bucket; scoreboard screen shows all three (stacked or tabbed, clearly labeled, switchable without leaving the screen).
+12. **Per-difficulty leaderboard (local JSON)** — `add_score(name, time, difficulty)` tags each entry and trims each difficulty's bucket to its own top 10 independently (a Hard run can't bump an Easy run off the list). Scoreboard screen (`run_scoreboard`) is now tabbed — 1/2/3 switches between EASY/MEDIUM/HARD without leaving the screen, opens on whichever difficulty was just played (`self.difficulty` passed in from `GameApp`). ✅ done
 13. **Final art/audio pass + verify both build targets** — desktop (`python main.py` / PyInstaller) and web (`python -m pygbag --build main.py`), following the reference repo's itch.io packaging steps.
 14. **Online leaderboard via Supabase** — added after the game is fully working locally. Migrates/extends the step-12 leaderboard to a live Supabase-backed scoreboard. User is new to Supabase, so this step introduces concepts as they come up (project setup, schema, Python client) rather than all at once.
 
@@ -61,9 +61,10 @@ The level is **not** a fixed, pre-authored layout. It starts with just a floor �
 
 ### Scoring — per-difficulty leaderboard
 
-- Each entry: `{"name": str, "time": float, "difficulty": "easy"|"medium"|"hard"}`.
-- `add_score(player_name, time_seconds, difficulty)` ranks/truncates to top-10 within that difficulty only.
-- Scoreboard screen shows all three lists (stacked columns or tabs/pages switchable with left/right or 1/2/3), difficulty clearly labeled.
+- Each entry: `{"name": str, "time": float, "difficulty": "easy"|"medium"|"hard"}`, all stored together in one `scores.json`.
+- `add_score(player_name, time_seconds, difficulty)` groups all scores by difficulty and trims each group to its own top 10 independently, then saves the recombined list.
+- `load_scores_by_difficulty(difficulty)` returns just one bucket, fastest first — what the scoreboard screen actually reads from.
+- Scoreboard screen (`run_scoreboard`) is tabbed: 1/2/3 switches EASY/MEDIUM/HARD live, active tab highlighted in yellow, no need to leave the screen. Opens on `initial_difficulty` (the difficulty just played, passed in from `GameApp.difficulty`) rather than always defaulting to one tab.
 
 ---
 

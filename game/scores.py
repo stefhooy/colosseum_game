@@ -6,7 +6,7 @@ import os
 from typing import List, Dict
 
 #import shared file path settings
-from .settings import SCORES_FILE, ASSETS_DIR
+from .settings import SCORES_FILE, ASSETS_DIR, DIFFICULTY_MEDIUM
 
 def load_scores() -> List[Dict]:
     """
@@ -42,18 +42,34 @@ def save_scores(scores: List[Dict]) -> None:
         #In browser/WASM environments, file writes may fail silently
         pass
 
-def add_score(player_name: str, time_seconds: float) -> None:
+def add_score(player_name: str, time_seconds: float, difficulty: str = DIFFICULTY_MEDIUM) -> None:
     """
-    Adding the score entries + sorting it by fastest time.
-    Only show the top 10 best results
+    Adding the score entry (tagged with its difficulty) + sorting it by fastest
+    time. Each difficulty keeps its own top 10 — a Hard run never bumps an
+    Easy run off the list and vice versa.
     """
-    #load the existing scores
+    #load every existing score (all difficulties, one shared JSON file)
     scores = load_scores()
-    #add new score as a dictionnary
-    scores.append({"name": player_name, "time": float(time_seconds)})
-    #Sorting the scores in asceding having the fastest scores first shown
+    #add the new score as a dictionnary, tagged with which difficulty it was run on
+    scores.append({"name": player_name, "time": float(time_seconds), "difficulty": difficulty})
+    #Group scores by difficulty so each bucket gets trimmed to its own top 10,
+    #instead of one difficulty's scores crowding out another's
+    by_difficulty: Dict[str, List[Dict]] = {}
+    for s in scores:
+        by_difficulty.setdefault(s.get("difficulty", DIFFICULTY_MEDIUM), []).append(s)
+    trimmed: List[Dict] = []
+    for entries in by_difficulty.values():
+        #Sorting the scores in ascending order, having the fastest scores first shown
+        entries.sort(key=lambda x: x["time"])
+        trimmed.extend(entries[:10])
+    #saving the recombined scores back into the JSON file
+    save_scores(trimmed)
+
+def load_scores_by_difficulty(difficulty: str) -> List[Dict]:
+    """
+    Returns just the scores for one difficulty, fastest time first. Used by
+    the scoreboard screen so it can show one bucket at a time.
+    """
+    scores = [s for s in load_scores() if s.get("difficulty") == difficulty]
     scores.sort(key=lambda x: x["time"])
-    #keep the top 10 best
-    scores = scores[:10]
-    #saving the scores back in the JSON file
-    save_scores(scores)
+    return scores
