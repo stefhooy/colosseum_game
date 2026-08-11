@@ -49,7 +49,7 @@ COP_STILL_FILE = "cop_idle.png"
 COP_RUN_RIGHT_FILE = "cop_run_right.png"
 COP_RUN_LEFT_FILE = "cop_run_left.png"
 #Custom arcade font
-ARCADE_FONT_FILE = "arcade_font.ttf"
+ARCADE_FONT_FILE = "Star Crush.ttf"
 #Where the scoreboard is saved into a json file
 SCORES_FILE = os.path.join(ASSETS_DIR, "scores.json")
 
