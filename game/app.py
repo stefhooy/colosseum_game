@@ -103,9 +103,6 @@ class GameApp:
         #continuous polling (pygame.mouse.get_pressed()) instead of the
         #discrete MOUSEBUTTONDOWN event — see _run_game_frame for why
         self._prev_mouse_buttons = (False, False, False)
-        #TEMP DEBUG state — tracks raw mouse position across frames so we
-        #can tell whether it updates at all while a movement key is held
-        self._debug_prev_mouse_pos = None
         #Global game state
         self.state = STATE_SPLASH
         self.player_name = "Unknown"
@@ -286,23 +283,6 @@ class GameApp:
         mouse_buttons = pygame.mouse.get_pressed()
         left_clicked = mouse_buttons[0] and not self._prev_mouse_buttons[0]
         right_clicked = mouse_buttons[2] and not self._prev_mouse_buttons[2]
-        #TEMP DEBUG: prints on every frame where a mouse button is down at
-        #all (not just the click edge), so we can see the raw polled state,
-        #the edge-detection result, and the player's current vx/on_ground
-        #together — remove once the build issue is fully understood.
-        if mouse_buttons[0] or mouse_buttons[2]:
-            print(f"[DEBUG] mouse_buttons={mouse_buttons} prev={self._prev_mouse_buttons} "
-                  f"left_clicked={left_clicked} right_clicked={right_clicked} "
-                  f"vx={self.player.vx} on_ground={self.player.on_ground} "
-                  f"raw_mouse={pygame.mouse.get_pos()}")
-        #TEMP DEBUG: prints whenever the raw mouse position CHANGES, even if
-        #no button is held — to check whether mouse position updates at all
-        #while a movement key is held down (move the mouse around while
-        #holding a movement key, without clicking, to test this specifically)
-        current_mouse_pos = pygame.mouse.get_pos()
-        if current_mouse_pos != self._debug_prev_mouse_pos:
-            print(f"[DEBUG] mouse MOVED to {current_mouse_pos} (vx={self.player.vx})")
-            self._debug_prev_mouse_pos = current_mouse_pos
         if left_clicked or right_clicked:
             #convert our mouse position (screen -> virtual surface -> world) using camera offsets
             mx, my = self._mouse_virtual_pos()
@@ -313,7 +293,6 @@ class GameApp:
                 x = int(wx - self.plat_w / 2)
                 y = int(wy - self.plat_h / 2)
                 self.platforms.append(Platform(x, y, self.plat_w, self.plat_h))
-                print(f"[DEBUG] platform ADDED at world=({x},{y}) total={len(self.platforms)}")
             #Right click will remove the nearest platform (but never remove the base floor)
             if right_clicked and len(self.platforms) > 1:
                 def dist2(p: Platform):
