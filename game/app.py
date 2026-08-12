@@ -13,7 +13,7 @@ from .settings import (
     STATE_SPLASH, STATE_MENU, STATE_NAME, STATE_DIFFICULTY, STATE_MAP_PREVIEW,
     STATE_SCOREBOARD, STATE_GAME, STATE_WIN,
     DIFFICULTY_MEDIUM,
-    WINDOW_TITLE, CAMERA_ZOOM, CAMERA_MOUSE_LOOKAHEAD,
+    WINDOW_TITLE, CAMERA_ZOOM,
     PLATFORM_BREAK_COLOR, PLATFORM_BREAK_DURATION,
 )
 #Import the helper functions + game systems from other python modules
@@ -68,8 +68,14 @@ class GameApp:
         self.virtual_h = int(SCREEN_H * CAMERA_ZOOM)
         self.game_surface = pygame.Surface((self.virtual_w, self.virtual_h))
         init_audio()
-        # Music is started later, after the first user interaction (splash screen),
-        # to satisfy Chrome's autoplay policy and prevent glitchy/blocked audio.
+        #Music starts immediately on launch, before any user interaction at
+        #all. On desktop this just works — no restriction. On web, browsers
+        #enforce a hard "needs a real user gesture first" autoplay policy
+        #that no amount of code can bypass; audio.py's web path already
+        #catches that failure quietly (see _web_play's .catch(...)), so this
+        #call is harmless there too — it just won't actually produce sound
+        #until the player's first click/keypress in that build specifically.
+        play_music()
         #Used to control FPS and compute delta time (dt)
         self.clock = pygame.time.Clock()
         #Fonts used during the game (HUD + editor overlay)
@@ -93,6 +99,13 @@ class GameApp:
         #Size of the next platform the player places (adjustable with [ ]/-+)
         self.plat_w = DEFAULT_PLAT_W
         self.plat_h = DEFAULT_PLAT_H
+        #Previous frame's mouse-button state, for edge-detecting clicks via
+        #continuous polling (pygame.mouse.get_pressed()) instead of the
+        #discrete MOUSEBUTTONDOWN event — see _run_game_frame for why
+        self._prev_mouse_buttons = (False, False, False)
+        #TEMP DEBUG state — tracks raw mouse position across frames so we
+        #can tell whether it updates at all while a movement key is held
+        self._debug_prev_mouse_pos = None
         #Global game state
         self.state = STATE_SPLASH
         self.player_name = "Unknown"
@@ -150,7 +163,6 @@ class GameApp:
         This loop does not run gameplay directly. Instead, it delegates to the correct
         screen/state (menu, name input, scoreboard, gameplay).
         """
-        music_started = False
         while True:
             #Splash screen state
             if self.state == STATE_SPLASH:
@@ -195,15 +207,6 @@ class GameApp:
                 if next_state == STATE_GAME:
                     #Timer/run only actually starts once the player leaves the map preview
                     self.reset_run(clear_platforms=True)
-                    #Music starts here too, not on the splash screen — the
-                    #chase music kicking in right as the run begins reads far
-                    #better than it playing under every menu/setup screen
-                    #beforehand. Still satisfies the "needs a user gesture"
-                    #browser autoplay rule, since this transition is itself
-                    #triggered by a keypress/click in run_map_preview.
-                    if not music_started:
-                        play_music()
-                        music_started = True
                 self.state = next_state
             #Scoreboard state
             elif self.state == STATE_SCOREBOARD:
@@ -270,25 +273,55 @@ class GameApp:
                     self.plat_h = max(8, self.plat_h - 4)
                 if event.key == pygame.K_KP_PLUS:
                     self.plat_h = min(80, self.plat_h + 4)
-            #Mouse clicks place/remove platforms — live, while still running
-            #and being chased, no pause
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                #convert our mouse position (screen -> virtual surface -> world) using camera offsets
-                mx, my = self._mouse_virtual_pos()
-                wx = mx + self.camera.offset_x
-                wy = my + self.camera.offset_y
-                #Left click will add a platform centered on the mouse
-                if event.button == 1:
-                    x = int(wx - self.plat_w / 2)
-                    y = int(wy - self.plat_h / 2)
-                    self.platforms.append(Platform(x, y, self.plat_w, self.plat_h))
-                #Right click will remove the nearest platform (but never remove the base floor)
-                if event.button == 3 and len(self.platforms) > 1:
-                    def dist2(p: Platform):
-                        cx, cy = p.rect.center
-                        return (cx - wx) ** 2 + (cy - wy) ** 2
-                    nearest = min(self.platforms[1:], key=dist2)
-                    self.platforms.remove(nearest)
+        #Mouse clicks place/remove platforms — live, while still running and
+        #being chased, no pause. Uses continuous button-state polling
+        #(pygame.mouse.get_pressed(), edge-detected against last frame's
+        #state) rather than the discrete MOUSEBUTTONDOWN event: on at least
+        #one real machine, that event reliably failed to arrive at all while
+        #a movement key was held down (confirmed via debug logging — no
+        #lag/stall, the event simply never showed up in the queue), even
+        #though continuous key-state polling for movement was unaffected.
+        #Polling the mouse the same way movement already reliably works
+        #sidesteps whatever that event-delivery issue was.
+        mouse_buttons = pygame.mouse.get_pressed()
+        left_clicked = mouse_buttons[0] and not self._prev_mouse_buttons[0]
+        right_clicked = mouse_buttons[2] and not self._prev_mouse_buttons[2]
+        #TEMP DEBUG: prints on every frame where a mouse button is down at
+        #all (not just the click edge), so we can see the raw polled state,
+        #the edge-detection result, and the player's current vx/on_ground
+        #together — remove once the build issue is fully understood.
+        if mouse_buttons[0] or mouse_buttons[2]:
+            print(f"[DEBUG] mouse_buttons={mouse_buttons} prev={self._prev_mouse_buttons} "
+                  f"left_clicked={left_clicked} right_clicked={right_clicked} "
+                  f"vx={self.player.vx} on_ground={self.player.on_ground} "
+                  f"raw_mouse={pygame.mouse.get_pos()}")
+        #TEMP DEBUG: prints whenever the raw mouse position CHANGES, even if
+        #no button is held — to check whether mouse position updates at all
+        #while a movement key is held down (move the mouse around while
+        #holding a movement key, without clicking, to test this specifically)
+        current_mouse_pos = pygame.mouse.get_pos()
+        if current_mouse_pos != self._debug_prev_mouse_pos:
+            print(f"[DEBUG] mouse MOVED to {current_mouse_pos} (vx={self.player.vx})")
+            self._debug_prev_mouse_pos = current_mouse_pos
+        if left_clicked or right_clicked:
+            #convert our mouse position (screen -> virtual surface -> world) using camera offsets
+            mx, my = self._mouse_virtual_pos()
+            wx = mx + self.camera.offset_x
+            wy = my + self.camera.offset_y
+            #Left click will add a platform centered on the mouse
+            if left_clicked:
+                x = int(wx - self.plat_w / 2)
+                y = int(wy - self.plat_h / 2)
+                self.platforms.append(Platform(x, y, self.plat_w, self.plat_h))
+                print(f"[DEBUG] platform ADDED at world=({x},{y}) total={len(self.platforms)}")
+            #Right click will remove the nearest platform (but never remove the base floor)
+            if right_clicked and len(self.platforms) > 1:
+                def dist2(p: Platform):
+                    cx, cy = p.rect.center
+                    return (cx - wx) ** 2 + (cy - wy) ** 2
+                nearest = min(self.platforms[1:], key=dist2)
+                self.platforms.remove(nearest)
+        self._prev_mouse_buttons = mouse_buttons
         #GAmeplay updates
         keys = pygame.key.get_pressed()
         #Update the physics if the run hasn't ended yet (win or caught)
@@ -352,17 +385,12 @@ class GameApp:
         #endlessly downward
         if self.player.rect.top > self.world_h + 400:
             self.reset_run(clear_platforms=False)
-        #camera follows the player, nudged toward wherever the mouse is
-        #pointing so you can scout/aim ahead to build without needing to
-        #physically walk the character there first (world -> virtual-surface
-        #handled by camera.apply)
-        mx, my = self._mouse_virtual_pos()
-        lookahead_x = (mx - self.virtual_w / 2) * CAMERA_MOUSE_LOOKAHEAD
-        lookahead_y = (my - self.virtual_h / 2) * CAMERA_MOUSE_LOOKAHEAD
-        self.camera.follow(
-            self.player.rect.centerx + lookahead_x,
-            self.player.rect.centery + lookahead_y,
-        )
+        #camera follows player center (world -> virtual-surface handled by
+        #camera.apply). Purely player-driven, no mouse influence — an
+        #earlier version nudged the camera toward the mouse to help aim
+        #beyond the current view, but that was reverted at the user's
+        #request in favor of a simpler, fully predictable camera.
+        self.camera.follow(self.player.rect.centerx, self.player.rect.centery)
         #draw everything for this frame onto the virtual surface
         self._draw()
         #Scale the virtual surface up to the real window and present it.
