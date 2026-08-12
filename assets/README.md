@@ -19,7 +19,7 @@ wired up and what's still needed.
 | `cop_run_left.png` | Police officer — running left, transparent background. |
 | `player_jump_right.png` / `player_jump_left.png` | Tourist/photographer — airborne pose (jumping or falling), transparent background, shown whenever `not on_ground`. Renamed from `jumping right/left.png` during Step 13's web-build verification — pygbag can't handle spaces in real asset filenames. |
 | `cop_jump_right.png` / `cop_jump_left.png` | Police officer — airborne pose, transparent background, also shown mid cheat-hop (reads as a leap toward the player). Renamed from `Cop Jumping right/left.png`, same reason as above. |
-| `Star Crush.ttf` | Custom TTF (`ARCADE_FONT_FILE` in settings.py) used ONLY for a handful of short, pure-word screen titles — it's missing 6 ASCII glyphs (`!,-._?`), so anything with numbers/punctuation/typed text uses `utils.get_readable_font` instead (pygame's default font). See PLAN.md's "Two-font system" note. |
+| `Nabla-Regular.ttf` | Custom TTF (`ARCADE_FONT_FILE` in settings.py), used for every piece of text in the game. **This is a processed copy, not the font as-downloaded** — see the "Not wired up" note below and PLAN.md's "Two-font system" section for the full story of why. |
 | `theme_music.ogg` | Looping background music. Converted from the source mp3 with `ffmpeg -ar 44100 -ac 2 -c:a libvorbis`, explicitly pinned to 44100 Hz stereo to match `pygame.mixer.pre_init(44100, ...)` in app.py — a mismatched sample rate is what caused the previous game's Firefox/Chrome playback issue, so this is deliberate, not a default. |
 | `siren.ogg` | Optional stinger for the cop catching you — user decided not to add this. |
 | `camera_shutter.ogg` | Optional stinger for the winning photo — user decided not to add this. |
@@ -34,9 +34,10 @@ under `assets/`, not just what the game code loads). `assets/unused/` is
 excluded wholesale via `pygbag.ini`'s `ignoredirs`.
 
 - `standing still right.png` — a near-duplicate of `player_idle.png` (both front-facing, no real left/right difference). `player_idle.png` is the one actually loaded.
-- `Star Crush.otf` — an OTF sibling of the TTF that's actually loaded. Only one font format is needed.
+- `Star Crush.ttf` / `Star Crush.otf` — the previous display font, fully replaced by Nabla. Kept in case Nabla ever needs to be reverted.
 - `SAMBA TEMPERADO 2015.mp3` — the source file `theme_music.ogg` was converted from. Kept as the original; not loaded by the game directly (pygame/browsers want ogg, not mp3).
-- `1001fonts-star-crush-eula.txt` — license terms for the Star Crush font. Not an asset the game loads, just keep it around for attribution/licensing reference.
+- `1001fonts-star-crush-eula.txt` — license terms for the (now-unused) Star Crush font. Kept for attribution/licensing reference.
+- `Nabla-Regular-original-color-font.ttf` — **the font exactly as downloaded**, a color/variable font (COLR/CPAL/SVG tables, for its signature layered-shadow look). This is NOT the file the game loads. pygame's text renderer (SDL_ttf) can only render plain monochrome outline glyphs — it fails on almost every character against this original file, even after instancing it down to a static (non-variable) font. The actual `assets/Nabla-Regular.ttf` the game uses is a processed copy of this file: instanced to its default axis values, then had the COLR/CPAL/SVG tables stripped out via `fonttools`, leaving just the plain glyf outlines underneath (which turned out to be complete, legible shapes on their own — Nabla's color "depth" layers are recolored copies of this same base outline). If Nabla's source font ever gets updated, redo this same processing on the new file rather than dropping it straight into `assets/`.
 
 Sprites follow the reference game's pattern, extended with a 4th pose: idle,
 run-left, run-right, and jump/airborne, scaled to a fixed height at load time.

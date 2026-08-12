@@ -45,12 +45,19 @@ def format_time(t: float) -> str:
 
 def get_font(size: int) -> pygame.font.Font:
     """
-    Loads the stylized Star Crush TTF from assets, otherwise goes back to
-    normal font. This is only for short, pure-word screen titles (e.g.
-    "SCOREBOARD", "CURSUS COLOSSEI") — Star Crush is missing several ASCII
-    glyphs (!,-._?), so it can't reliably render timers, hints, typed player
-    names, or anything else with numbers/punctuation. Use get_readable_font
-    for all of that instead.
+    Loads the game's display font (Nabla) from assets, used for every piece
+    of text in the game. Full ASCII glyph coverage.
+
+    Nabla ships as a COLOR font (COLR/CPAL/SVG tables, for its layered-
+    shadow look) — pygame's text renderer (SDL_ttf) can only render plain
+    monochrome outline glyphs, and fails on almost every character against
+    the original file. The shipped assets/Nabla-Regular.ttf is a processed
+    copy (see PLAN.md for the full story): instanced down to a static font
+    at its default axis values, then had the COLR/CPAL/SVG tables stripped
+    out entirely, leaving just the plain glyf outlines underneath — which
+    turned out to be complete, legible shapes on their own (Nabla's "depth"
+    layers are recolored copies of this same base outline). Rendered white/
+    monochrome instead of Nabla's original color effect, but fully working.
     """
     #build the full path to our font file
     font_path = os.path.join(ASSETS_DIR, ARCADE_FONT_FILE)
@@ -58,15 +65,6 @@ def get_font(size: int) -> pygame.font.Font:
     if os.path.exists(font_path):
         return pygame.font.Font(font_path, size)
     #otherwise , default system font (prevent for the game to crash)
-    return pygame.font.Font(None, size)
-
-def get_readable_font(size: int) -> pygame.font.Font:
-    """
-    Pygame's built-in default font — full ASCII coverage, used for anything
-    that needs to reliably render numbers/punctuation/arbitrary typed text:
-    timers, HUD text, hints, score lines, and the win/caught titles (both
-    contain "!", which Star Crush can't render at all).
-    """
     return pygame.font.Font(None, size)
 
 #Draws text centered horizontally on the screen at a given y position.

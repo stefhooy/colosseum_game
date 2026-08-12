@@ -64,7 +64,7 @@ COP_RUN_LEFT_FILE = "cop_run_left.png"
 COP_JUMP_RIGHT_FILE = "cop_jump_right.png"
 COP_JUMP_LEFT_FILE = "cop_jump_left.png"
 #Custom arcade font
-ARCADE_FONT_FILE = "Star Crush.ttf"
+ARCADE_FONT_FILE = "Nabla-Regular.ttf"
 #Where the scoreboard is saved into a json file
 SCORES_FILE = os.path.join(ASSETS_DIR, "scores.json")
 
@@ -117,6 +117,8 @@ STATE_MENU = "menu"
 STATE_NAME = "name"
 STATE_DIFFICULTY = "difficulty"
 STATE_MAP_PREVIEW = "map_preview"
+STATE_WARNING = "warning"
+STATE_CONTROLS = "controls"
 STATE_SCOREBOARD = "scoreboard"
 STATE_GAME = "game"
 STATE_WIN = "win"
@@ -149,19 +151,47 @@ COP_START_GAP_BY_DIFFICULTY = {
     DIFFICULTY_MEDIUM: 140,
     DIFFICULTY_HARD: 80,
 }
-#How long (seconds) the cop keeps attempting a normal jump toward the player
-#before giving up and "cheating" — a guaranteed hop toward them (see cop.py).
-#This is now a genuine LAST RESORT, not a routine catch-up tool: real jumps
-#are always tried first and remain the cop's primary way of climbing, and
-#the cop only ever cheats once it's been stuck without real upward progress
-#for a long stretch. It still exists so a cleverly-built, genuinely
-#unreachable gap can't leave the cop stuck forever — but it should be rare,
-#not something you see every time you climb.
-COP_PATIENCE_BY_DIFFICULTY = {
+#How long (seconds) the cop tries a normal jump before it builds its OWN
+#platform to climb — its main way of keeping pace once the player starts
+#building. This is the routine behavior, not a rare fallback: it should
+#trigger often enough that the cop feels like a real competing builder, not
+#just a follower. Hard barely waits; Easy gives the player real breathing
+#room before the cop starts constructing.
+COP_BUILD_PATIENCE_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 2.0,
+    DIFFICULTY_MEDIUM: 1.2,
+    DIFFICULTY_HARD: 0.5,
+}
+#How long (seconds) the cop keeps trying (real jumps + building its own
+#platforms) before resorting to its actual last resort: destroying the
+#nearest player-built platform (see cop.py's _break_nearest_platform). Much
+#longer than the build patience above — building should resolve most stuck
+#situations on its own, so breaking should be rare, not routine.
+COP_BREAK_PATIENCE_BY_DIFFICULTY = {
     DIFFICULTY_EASY: 6.0,
     DIFFICULTY_MEDIUM: 4.0,
     DIFFICULTY_HARD: 2.5,
 }
+#Size of the platform the cop builds for itself — a bit smaller than the
+#player's own default (DEFAULT_PLAT_W/H), so its stepping stones read as
+#hastily-built rather than as polished as the player's construction.
+COP_BUILD_PLAT_W = 130
+COP_BUILD_PLAT_H = 16
+#How high above its current position the cop's self-built platform appears —
+#capped so it's reachable by the cop's own normal jump afterward (a real
+#player jump covers ~151px at jump_strength=650/gravity=1400; this stays
+#comfortably under that so the cop can actually reach what it just built).
+COP_BUILD_RISE = 120
+#Safety cap so a pathological stall can't repeat forever — fails soft
+MAX_COP_BUILDS = 300
+#Tint for the cop's own self-built platforms — matches the cop's
+#established red identity (MINIMAP_COP_COLOR), so it's visually obvious
+#these are the COP's platforms, not the player's. Deliberately a duller,
+#more brick-toned red than PLATFORM_BREAK_COLOR's brighter flash, so a
+#permanent cop-built platform doesn't get visually confused with the
+#brief "just broke something" flash effect.
+COP_PLATFORM_FILL = (150, 55, 45)
+COP_PLATFORM_OUTLINE = (70, 20, 15)
 
 #Supabase settinigs added in the game (live dynamic database)
 #The anon key below is the PUBLIC key — it's meant to be embedded in client
@@ -176,4 +206,4 @@ SUPABASE_SCORES_TABLE = "scores"
 #giving up and falling back to the local scores.json leaderboard. The web
 #build has no equivalent timeout knob — the browser's own Fetch API handles
 #that.
-SUPABASE_REQUEST_TIMEOUT = 5
+SUPABASE_REQUEST_TIMEOUT = 511

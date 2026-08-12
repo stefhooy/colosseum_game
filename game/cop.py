@@ -20,7 +20,9 @@ from .settings import (
     COP_SPEED_BY_DIFFICULTY,
     COP_REACTION_DELAY_BY_DIFFICULTY,
     COP_START_GAP_BY_DIFFICULTY,
-    COP_PATIENCE_BY_DIFFICULTY,
+    COP_BUILD_PATIENCE_BY_DIFFICULTY,
+    COP_BREAK_PATIENCE_BY_DIFFICULTY,
+    COP_BUILD_PLAT_W, COP_BUILD_PLAT_H, COP_BUILD_RISE, MAX_COP_BUILDS,
 )
 
 #How far (in px) the player needs to be above the cop before it's worth
@@ -33,23 +35,28 @@ STEER_DEADZONE = 6
 #improvement resets nothing, and the stuck timer keeps climbing
 PROGRESS_EPSILON = 20
 
-#--- Stuck fallback: breaking a platform (see Cop._break_nearest_platform) ---
+#--- Stuck fallbacks: building (routine), breaking (rare last resort) ---
 #Since the level has no fixed layout (the player builds their own platforms
 #live), the cop can't rely on a precomputed path the way an early version of
 #this AI did. Instead it always just heads toward wherever the player
 #currently is, jumping normally when that's reachable.
 #
-#An earlier version of this AI used a "cheat hop" here instead — teleporting
-#directly to a point near the player when stuck. Player feedback was that it
-#felt overpowered even after toning the timing down, so it was replaced
-#entirely: now, if the cop is stuck without real upward progress longer than
-#its patience allows, it destroys the nearest player-built platform instead
-#of teleporting past the obstacle. This is a genuine last resort (patience
-#is long — see COP_PATIENCE_BY_DIFFICULTY), and real jumps are always tried
-#first; it exists purely so a genuinely unreachable gap can't leave the cop
-#stuck forever, while staying visible and fair rather than magic. The floor
-#itself (platforms[0]) can never be broken.
-#Safety cap so a pathological stall can't repeat forever — fails soft
+#Two fallbacks kick in the longer the cop goes without real upward progress:
+#1. BUILD (routine, see _build_platform_toward_player) — the cop places its
+#   own stepping-stone platform, just like the player does. This is the
+#   main way the cop keeps pace once the player starts building, matching
+#   the request that the cop compete on the same terms rather than just
+#   following — it's meant to happen regularly, not rarely.
+#2. BREAK (rare last resort, see _break_nearest_platform) — if even
+#   building doesn't get the cop unstuck for a long stretch, it destroys
+#   the nearest player-built platform instead. An earlier version of this
+#   AI used a "cheat hop" (teleporting toward the player) for this; player
+#   feedback was that it felt overpowered even after toning the timing
+#   down, so it was replaced with breaking, which is at least visible and
+#   fair rather than magic. The floor itself (platforms[0]) can never be
+#   broken, and this tier is now even rarer since building resolves most
+#   stuck situations on its own.
+#Safety caps so a pathological stall can't repeat forever — fail soft
 MAX_PLATFORM_BREAKS = 100
 
 
@@ -73,11 +80,14 @@ class Cop:
     (reaction-delayed) position, jumping when they're above and there's
     ground to jump to.
 
-    Unlike the player, the cop has a last-resort fallback: since there's no
-    fixed layout to rely on, if it's stuck without real upward progress for
-    longer than its patience allows, it destroys the nearest player-built
-    platform (see _break_nearest_platform) so it's never permanently stuck.
-    Real jumps are always tried first — this is rare, not routine.
+    Unlike the player, the cop has two stuck fallbacks layered on top of
+    real jumps: if it's stuck without real upward progress for a while, it
+    builds its own stepping-stone platform (see _build_platform_toward_player)
+    — a routine, competing-builder behavior, not a rare trick. If even that
+    doesn't resolve things for a much longer stretch, it falls back further
+    to destroying the nearest player-built platform (see
+    _break_nearest_platform) so it's never permanently stuck. Real jumps are
+    always tried first.
     """
     def __init__(self, x: int, y: int, difficulty: str):
         #cop collision rectangle used for physics and collisions (same size as the player)
@@ -90,7 +100,8 @@ class Cop:
         #Difficulty tuning — the only numbers that differ between Easy/Medium/Hard
         self.speed = COP_SPEED_BY_DIFFICULTY[difficulty]
         self.reaction_delay = COP_REACTION_DELAY_BY_DIFFICULTY[difficulty]
-        self.patience = COP_PATIENCE_BY_DIFFICULTY[difficulty]
+        self.build_patience = COP_BUILD_PATIENCE_BY_DIFFICULTY[difficulty]
+        self.break_patience = COP_BREAK_PATIENCE_BY_DIFFICULTY[difficulty]
         self.on_ground = False
         self.facing_right = True
 
@@ -99,12 +110,13 @@ class Cop:
         self._reaction_timer = 0.0
         self._known_player_x = x
         #Tracks the best (smallest) centery reached, and how long it's been
-        #stuck without meaningfully improving on that — drives the
-        #platform-breaking fallback in ai_try_jump
+        #stuck without meaningfully improving on that — drives both the
+        #build and break fallbacks in ai_try_jump
         self._best_centery = float(self.rect.centery)
         self._stuck_timer = 0.0
-        #Lifetime count of platforms broken this run, capped defensively so
-        #a pathological stall can't repeat forever
+        #Lifetime counts this run, capped defensively so a pathological
+        #stall can't repeat forever
+        self._platforms_built = 0
         self._platforms_broken = 0
         #Set to the rect of whatever platform was just destroyed, for one
         #frame only — GameApp reads this right after calling ai_try_jump to
@@ -147,11 +159,13 @@ class Cop:
         self.facing_right = True
         self.speed = COP_SPEED_BY_DIFFICULTY[difficulty]
         self.reaction_delay = COP_REACTION_DELAY_BY_DIFFICULTY[difficulty]
-        self.patience = COP_PATIENCE_BY_DIFFICULTY[difficulty]
+        self.build_patience = COP_BUILD_PATIENCE_BY_DIFFICULTY[difficulty]
+        self.break_patience = COP_BREAK_PATIENCE_BY_DIFFICULTY[difficulty]
         self._reaction_timer = 0.0
         self._known_player_x = x
         self._best_centery = float(self.rect.centery)
         self._stuck_timer = 0.0
+        self._platforms_built = 0
         self._platforms_broken = 0
         self.last_broken_platform_rect = None
 
@@ -186,21 +200,43 @@ class Cop:
 
     #Jumps when the player is above the cop and it's on solid ground —
     #mirrors Player.try_jump, but the trigger is "the player is above me"
-    #instead of a key press. If we've been stuck without making real upward
-    #progress longer than our patience allows (a genuine last resort — see
-    #COP_PATIENCE_BY_DIFFICULTY), destroy the nearest player-built platform
-    #instead of gambling on another jump landing anywhere.
+    #instead of a key press. Two escalating fallbacks kick in the longer
+    #the cop goes without real upward progress: first it builds its own
+    #stepping-stone platform (routine — see COP_BUILD_PATIENCE_BY_DIFFICULTY),
+    #and only much later, if that's still not enough, it destroys the
+    #nearest player-built platform instead (rare last resort — see
+    #COP_BREAK_PATIENCE_BY_DIFFICULTY).
     def ai_try_jump(self, player_rect: pygame.Rect, platforms: List[Platform]) -> None:
         #Cleared every call — only set for the one frame a break actually happens
         self.last_broken_platform_rect = None
         needs_to_climb = player_rect.top < self.rect.top - CLIMB_TOLERANCE
         if not (needs_to_climb and self.on_ground):
             return
-        if self._stuck_timer >= self.patience and self._platforms_broken < MAX_PLATFORM_BREAKS:
+        if self._stuck_timer >= self.break_patience and self._platforms_broken < MAX_PLATFORM_BREAKS:
             self._break_nearest_platform(platforms)
+            return
+        if self._stuck_timer >= self.build_patience and self._platforms_built < MAX_COP_BUILDS:
+            self._build_platform_toward_player(platforms)
             return
         self.vy = -self.jump_strength
         self.on_ground = False
+
+    #Builds a stepping-stone platform for itself, the same way the player
+    #builds — a real, physics-based platform placed within normal jump
+    #range, not a teleport. Positioned above the cop's current spot, biased
+    #toward the player's x, capped by COP_BUILD_RISE so a following normal
+    #jump can actually reach it. Resets the stuck timer so the cop gets a
+    #genuine chance to climb via what it just built before considering
+    #building (or breaking) again.
+    def _build_platform_toward_player(self, platforms: List[Platform]) -> None:
+        #Bias the platform's x toward the player, but keep it close enough
+        #to the cop's own x that a normal jump can actually land on it
+        build_cx = self.rect.centerx + max(-80, min(80, self._known_player_x - self.rect.centerx))
+        build_x = int(build_cx - COP_BUILD_PLAT_W / 2)
+        build_y = int(self.rect.top - COP_BUILD_RISE)
+        platforms.append(Platform(build_x, build_y, COP_BUILD_PLAT_W, COP_BUILD_PLAT_H, built_by="cop"))
+        self._platforms_built += 1
+        self._stuck_timer = 0.0
 
     #Destroys the player-built platform nearest to the cop (never the floor,
     #platforms[0]) — the last-resort fallback for a gap real jumps can't

@@ -16,13 +16,15 @@ from .settings import (
     STATE_SPLASH,
     STATE_MENU,
     STATE_NAME,
+    STATE_WARNING,
+    STATE_CONTROLS,
     STATE_SCOREBOARD,
     STATE_GAME,
     DIFFICULTY_EASY,
     DIFFICULTY_MEDIUM,
     DIFFICULTY_HARD,
 )
-from .utils import safe_load_image, get_font, get_readable_font, draw_center_text, format_time
+from .utils import safe_load_image, get_font, draw_center_text, format_time
 from .scores import load_scores_by_difficulty, load_scores_online_by_difficulty
 from .effects import draw_goal_glow
 
@@ -31,7 +33,7 @@ async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     Shows first_screen.jpg fullscreen. Any key or click advances to the menu.
     """
     img = safe_load_image(os.path.join(ASSETS_DIR, FIRST_SCREEN_FILE), convert_alpha=False)
-    font = get_readable_font(36)
+    font = get_font(36)
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -64,7 +66,7 @@ async def run_menu(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     #Font used for title and instructions
     font_title = get_font(96)
-    font_body = get_readable_font(40)
+    font_body = get_font(40)
     #Y positions for the layout to align the text easier
     TITLE_Y = 120
     LINE1_Y = 260
@@ -115,9 +117,7 @@ async def run_name_input(screen: pygame.Surface, clock: pygame.time.Clock) -> Op
     """
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     font_title = get_font(72)
-    #Readable font, not Star Crush: this also renders whatever the player
-    #actually types, and Star Crush can't reliably render arbitrary text
-    font_body = get_readable_font(44)
+    font_body = get_font(44)
     #Player name is built character by character from keyboard input
     name = ""
 
@@ -178,8 +178,8 @@ async def run_difficulty_select(screen: pygame.Surface, clock: pygame.time.Clock
     """
     menu_bg = safe_load_image(os.path.join(ASSETS_DIR, MENU_BG_FILE), convert_alpha=False)
     font_title = get_font(80)
-    font_option = get_readable_font(46)
-    font_desc = get_readable_font(30)
+    font_option = get_font(46)
+    font_desc = get_font(30)
 
     #Each option: (key, difficulty value, label, short description)
     options = [
@@ -238,9 +238,9 @@ async def run_scoreboard(
     #Load scoreboard background (fallback works if ever missing)
     sb_bg = safe_load_image(os.path.join(ASSETS_DIR, SCOREBOARD_BG_FILE), convert_alpha=False)
     font_title = get_font(90)
-    font_tabs = get_readable_font(38)
-    font_body = get_readable_font(44)
-    font_sync = get_readable_font(26)
+    font_tabs = get_font(38)
+    font_body = get_font(44)
+    font_sync = get_font(26)
 
     #Which difficulty tab is currently shown
     current = initial_difficulty
@@ -337,12 +337,9 @@ async def run_win_screen(
     - STATE_SCOREBOARD if S is pressed
     """
     final_bg = safe_load_image(os.path.join(ASSETS_DIR, FINAL_BG_FILE), convert_alpha=False)
-    #Readable font, not Star Crush, even for the title here — "PHOTO CAPTURED!"
-    #contains "!", one of the glyphs Star Crush doesn't have. Bigger size
-    #carries the drama instead of the stylized typeface.
-    font_title = get_readable_font(110)
-    font_body = get_readable_font(50)
-    font_hint = get_readable_font(36)
+    font_title = get_font(110)
+    font_body = get_font(50)
+    font_hint = get_font(36)
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -398,7 +395,96 @@ async def run_map_preview(
         return int(wx * scale_x), int(wy * scale_y)
 
     font_title = get_font(64)
-    font_body = get_readable_font(38)
+    font_body = get_font(38)
+
+    while True:
+        _ = clock.tick(FPS) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return STATE_MENU
+                return STATE_WARNING
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                return STATE_WARNING
+
+        screen.blit(preview_bg, (0, 0))
+
+        #Spawn marker (same orange dot style as the in-game spawn marker)
+        pygame.draw.circle(screen, (255, 165, 0), to_preview(*spawn), 8)
+        #Goal marker (reuses the same pulsing glow used in gameplay)
+        draw_goal_glow(screen, to_preview(goal_rect.centerx, goal_rect.centery))
+
+        draw_center_text(screen, font_title, "SCOUT THE COLOSSEUM", 60, (255, 255, 255))
+        draw_center_text(screen, font_body, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 100, (255, 255, 255))
+        draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (200, 200, 200))
+
+        pygame.display.flip()
+        await asyncio.sleep(0)  #yield to browser each frame
+
+#Runs the "the cop spotted you" warning screen (shown after the map preview,
+#before the controls screen and gameplay itself)
+async def run_warning_screen(screen: pygame.Surface, clock: pygame.time.Clock, background: pygame.Surface) -> str:
+    """
+    A short narrative beat between scouting the map and actually starting
+    the climb: a black message box announcing the chase is on. Any key or
+    click advances to the controls screen; ESC goes back to the menu.
+    """
+    preview_bg = pygame.transform.smoothscale(background, (SCREEN_W, SCREEN_H))
+    font_title = get_font(70)
+    font_hint = get_font(36)
+
+    while True:
+        _ = clock.tick(FPS) / 1000.0
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return STATE_MENU
+                return STATE_CONTROLS
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                return STATE_CONTROLS
+
+        screen.blit(preview_bg, (0, 0))
+
+        msg1 = font_title.render("THE COP SPOTTED YOU!", True, (255, 255, 255))
+        msg2 = font_title.render("RUN TOWARDS THE TOP OF THE COLOSSEUM", True, (255, 255, 255))
+        msg3 = font_title.render("BEFORE HE CATCHES YOU!", True, (255, 255, 255))
+        box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
+        box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 70
+        box_x = (SCREEN_W - box_w) // 2
+        box_y = (SCREEN_H - box_h) // 2
+        pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(box_x, box_y, box_w, box_h))
+        pygame.draw.rect(screen, (255, 255, 255), pygame.Rect(box_x, box_y, box_w, box_h), 2)
+        screen.blit(msg1, (box_x + 40, box_y + 20))
+        screen.blit(msg2, (box_x + 40, box_y + 20 + msg1.get_height() + 10))
+        screen.blit(msg3, (box_x + 40, box_y + 20 + msg1.get_height() + msg2.get_height() + 20))
+
+        draw_center_text(screen, font_hint, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 70, (255, 255, 0))
+
+        pygame.display.flip()
+        await asyncio.sleep(0)  #yield to browser each frame
+
+#Runs the controls-reminder screen (shown right before gameplay actually starts)
+async def run_controls_screen(screen: pygame.Surface, clock: pygame.time.Clock, background: pygame.Surface) -> str:
+    """
+    Lists the core controls one last time before the run/timer starts. Any
+    key or click starts the actual climb; ESC goes back to the menu.
+    """
+    preview_bg = pygame.transform.smoothscale(background, (SCREEN_W, SCREEN_H))
+    font_title = get_font(70)
+    font_body = get_font(42)
+    font_luck = get_font(56)
+    font_hint = get_font(36)
+
+    controls = [
+        "LEFT / RIGHT  —  MOVE",
+        "UP / SPACE  —  JUMP",
+        "LEFT CLICK  —  BUILD PLATFORM",
+        "RIGHT CLICK  —  REMOVE PLATFORM",
+    ]
 
     while True:
         _ = clock.tick(FPS) / 1000.0
@@ -414,14 +500,15 @@ async def run_map_preview(
 
         screen.blit(preview_bg, (0, 0))
 
-        #Spawn marker (same orange dot style as the in-game spawn marker)
-        pygame.draw.circle(screen, (255, 165, 0), to_preview(*spawn), 8)
-        #Goal marker (reuses the same pulsing glow used in gameplay)
-        draw_goal_glow(screen, to_preview(goal_rect.centerx, goal_rect.centery))
+        draw_center_text(screen, font_title, "CONTROLS", 110, (255, 255, 255))
 
-        draw_center_text(screen, font_title, "SCOUT THE COLOSSEUM", 60, (255, 255, 255))
-        draw_center_text(screen, font_body, "PRESS ANY KEY TO BEGIN THE CLIMB", SCREEN_H - 100, (255, 255, 255))
-        draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (200, 200, 200))
+        start_y = 260
+        line_h = 60
+        for i, line in enumerate(controls):
+            draw_center_text(screen, font_body, line, start_y + i * line_h, (255, 255, 255))
+
+        draw_center_text(screen, font_luck, "GOOD LUCK!", start_y + len(controls) * line_h + 50, (255, 215, 0))
+        draw_center_text(screen, font_hint, "PRESS ANY KEY OR CLICK TO START", SCREEN_H - 70, (255, 255, 0))
 
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
