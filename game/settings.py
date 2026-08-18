@@ -155,7 +155,7 @@ COP_START_GAP_BY_DIFFICULTY = {
 #where the cop just stands still — on top of the spatial start gap above,
 #not instead of it. Gives the player a fair, consistent moment to get moving
 #before the chase begins, regardless of which difficulty tuning applies.
-COP_HEADSTART_SECONDS = 2.0
+COP_HEADSTART_SECONDS = 1.0
 #How long (seconds) the cop tries a normal jump before it builds its OWN
 #platform to climb — its main way of keeping pace once the player starts
 #building. This is the routine behavior, not a rare fallback: it should

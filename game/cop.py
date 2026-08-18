@@ -48,6 +48,12 @@ PROGRESS_EPSILON = 20
 #regardless of which difficulty is actually running.
 JUMP_REACH_DX = 150
 JUMP_REACH_DY = 145
+#How close (px, horizontally) the cop needs to be to its current target
+#before it actually jumps — see ai_try_jump. Jumping from a bad horizontal
+#position just wastes the jump and stalls real progress (which paradoxically
+#makes the cop feel SLOWER, not smarter), so it now waits until it's
+#reasonably lined up, then jumps immediately — no extra delay once aligned.
+JUMP_ALIGN_TOLERANCE = 50
 
 #--- Stuck fallbacks: building (routine), breaking (rare last resort) ---
 #Since the level has no fixed layout (the player builds their own platforms
@@ -252,33 +258,47 @@ class Cop:
         else:
             self.vx = 0.0
 
-    #Finds the closest platform that's genuinely within normal jump range
-    #(see JUMP_REACH_DX/DY) and above the cop by more than CLIMB_TOLERANCE —
-    #the "optimization technique" behind preferring existing platforms over
-    #building a new one. A simple nearest-neighbor scan; the platform lists
-    #here are small (a handful to a few dozen), so no fancier structure is
-    #worth the complexity.
+    #Finds the BEST platform to climb toward among everything genuinely
+    #within normal jump range (see JUMP_REACH_DX/DY) and above the cop by
+    #more than CLIMB_TOLERANCE — the "optimization technique" behind
+    #preferring existing platforms over building a new one. "Best" means
+    #the most upward progress (highest platform, i.e. smallest resulting
+    #centery), not just whichever happens to be geometrically nearest —
+    #a smart climber always takes the platform that gets it furthest, and
+    #only uses horizontal closeness to break ties between equally-high
+    #options. A simple scored scan; the platform lists here are small (a
+    #handful to a few dozen), so no fancier structure is worth the
+    #complexity.
     def _find_nearest_reachable_platform(self, platforms: List[Platform]) -> Optional[Platform]:
         best = None
-        best_dist2 = None
+        best_key = None
         for p in platforms:
             dx = p.rect.centerx - self.rect.centerx
             dy = self.rect.centery - p.rect.centery  # positive = platform is above
             if dy <= CLIMB_TOLERANCE or dy > JUMP_REACH_DY or abs(dx) > JUMP_REACH_DX:
                 continue
-            dist2 = dx * dx + dy * dy
-            if best is None or dist2 < best_dist2:
+            #Maximize height gain first (so sort ascending on -dy), then
+            #minimize horizontal distance as the tiebreaker
+            key = (-dy, abs(dx))
+            if best is None or key < best_key:
                 best = p
-                best_dist2 = dist2
+                best_key = key
         return best
 
-    #Jumps when the player is above the cop and it's on solid ground —
-    #mirrors Player.try_jump, but the trigger is "the player is above me"
-    #instead of a key press. Two escalating fallbacks kick in the longer
-    #the cop goes without real upward progress: first it starts building its
-    #own stepping-stone platform (routine — see COP_BUILD_PATIENCE_BY_DIFFICULTY),
-    #and only much later, if that's still not enough, it destroys the
-    #nearest player-built platform instead (rare last resort — see
+    #Jumps when the player is above the cop, it's on solid ground, AND it's
+    #actually lined up with whatever it's aiming for (see JUMP_ALIGN_TOLERANCE)
+    #— a smart cop doesn't jump from a bad position just because it's grounded;
+    #it waits the one or two extra frames to line up, then jumps immediately,
+    #no further delay. A misaligned jump doesn't fail outright, but it wastes
+    #the attempt and stalls real progress, which reads as "dumb" (and, via the
+    #stuck-timer, actually pushes it toward building/breaking sooner too —
+    #so aiming well also means using those fallbacks less).
+    #
+    #Two escalating fallbacks kick in the longer the cop goes without real
+    #upward progress: first it starts building its own stepping-stone
+    #platform (routine — see COP_BUILD_PATIENCE_BY_DIFFICULTY), and only
+    #much later, if that's still not enough, it destroys the nearest
+    #player-built platform instead (rare last resort — see
     #COP_BREAK_PATIENCE_BY_DIFFICULTY). Does nothing during the opening
     #headstart or while frozen mid-build.
     def ai_try_jump(self, player_rect: pygame.Rect, platforms: List[Platform]) -> None:
@@ -295,8 +315,13 @@ class Cop:
         if self._stuck_timer >= self.build_patience and self._platforms_built < MAX_COP_BUILDS:
             self._start_building()
             return
-        self.vy = -self.jump_strength
-        self.on_ground = False
+        #Same target ai_steer is currently walking toward — a reachable
+        #platform if one exists, otherwise the player directly
+        target = self._find_nearest_reachable_platform(platforms)
+        target_x = target.rect.centerx if target is not None else self._known_player_x
+        if abs(self.rect.centerx - target_x) <= JUMP_ALIGN_TOLERANCE:
+            self.vy = -self.jump_strength
+            self.on_ground = False
 
     #Starts building a stepping-stone platform for itself, the same way the
     #player builds — a real, physics-based platform within normal jump
