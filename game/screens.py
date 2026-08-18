@@ -49,7 +49,7 @@ async def run_splash(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
         else:
             screen.fill((10, 10, 25))
 
-        draw_center_text(screen, font, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 80, (255, 255, 255))
+        draw_center_text(screen, font, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 80, (0, 255, 255))
         pygame.display.flip()
         await asyncio.sleep(0)
 
@@ -100,11 +100,11 @@ async def run_menu(screen: pygame.Surface, clock: pygame.time.Clock) -> str:
         #Title of the game! and brief description of the game for new incomers of the game
         draw_center_text(screen, font_title, "CURSUS COLOSSEI", TITLE_Y)
         draw_center_text(screen, font_body, "It's your last night in Rome. Climb the Colosseum for one epic photo.", LINE1_Y,)
-        draw_center_text(screen, font_body, "A cop is on your tail — reach the top before curfew catches you!", LINE2_Y,)
+        draw_center_text(screen, font_body, "If you go, the cop will be on your tail! Reach the top before the cop catches you!", LINE2_Y,)
         #Show the menu options
-        draw_center_text(screen, font_body, "PRESS ENTER TO START", OPT1_Y, (255, 255, 255))
-        draw_center_text(screen, font_body, "PRESS S FOR SCOREBOARD", OPT2_Y, (255, 255, 255))
-        draw_center_text(screen, font_body, "PRESS ESC TO QUIT", OPT3_Y, (255, 255, 255))
+        draw_center_text(screen, font_body, "PRESS ENTER TO START", OPT1_Y, (0, 255, 255))
+        draw_center_text(screen, font_body, "PRESS S FOR SCOREBOARD", OPT2_Y, (0, 255, 255))
+        draw_center_text(screen, font_body, "PRESS ESC TO QUIT", OPT3_Y, (0, 255, 255))
 
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
@@ -162,7 +162,7 @@ async def run_name_input(screen: pygame.Surface, clock: pygame.time.Clock) -> Op
         name_surf = font_body.render(name, True, (255, 255, 255))
         screen.blit(name_surf, (box_x + 18, box_y + 18))
         #Instructionn to go back
-        draw_center_text(screen, font_body, "ESC TO GO BACK", 540, (255, 255, 255))
+        draw_center_text(screen, font_body, "ESC TO GO BACK", 540, (0, 255, 255))
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
 
@@ -205,16 +205,16 @@ async def run_difficulty_select(screen: pygame.Surface, clock: pygame.time.Clock
         else:
             screen.fill((10, 10, 25))
 
-        draw_center_text(screen, font_title, "SELECT DIFFICULTY", 140, (255, 255, 255))
+        draw_center_text(screen, font_title, "SELECT DIFFICULTY", 140, (0, 255, 255))
 
         start_y = 380
         gap_y = 130
         for i, (_key, _value, label, desc) in enumerate(options):
             y = start_y + i * gap_y
-            draw_center_text(screen, font_option, label, y, (255, 255, 255))
-            draw_center_text(screen, font_desc, desc, y + 55, (200, 200, 200))
+            draw_center_text(screen, font_option, label, y, (0, 255, 255))
+            draw_center_text(screen, font_desc, desc, y + 55, (50, 50, 50))
 
-        draw_center_text(screen, font_desc, "ESC TO GO BACK", SCREEN_H - 60, (200, 200, 200))
+        draw_center_text(screen, font_desc, "ESC TO GO BACK", SCREEN_H - 60, (50, 50, 50))
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
 
@@ -296,7 +296,7 @@ async def run_scoreboard(
         tab_gap = 260
         tabs_start_x = SCREEN_W // 2 - tab_gap
         for i, (_key, value, label) in enumerate(tabs):
-            color = (255, 255, 0) if value == current else (255, 255, 255)
+            color = (0, 255, 0) if value == current else (0, 255, 255)
             surf = font_tabs.render(label, True, color)
             x = tabs_start_x + i * tab_gap - surf.get_width() // 2
             screen.blit(surf, (x, 190))
@@ -416,9 +416,9 @@ async def run_map_preview(
         #Goal marker (reuses the same pulsing glow used in gameplay)
         draw_goal_glow(screen, to_preview(goal_rect.centerx, goal_rect.centery))
 
-        draw_center_text(screen, font_title, "SCOUT THE COLOSSEUM", 60, (255, 255, 255))
-        draw_center_text(screen, font_body, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 100, (255, 255, 255))
-        draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (200, 200, 200))
+        draw_center_text(screen, font_title, "SCOUT THE COLOSSEUM", 60, (255, 140, 0))
+        draw_center_text(screen, font_body, "PRESS ANY KEY TO CONTINUE", SCREEN_H - 100, (0, 255, 255))
+        draw_center_text(screen, font_body, "ESC TO GO BACK", SCREEN_H - 50, (0, 255, 255))
 
         pygame.display.flip()
         await asyncio.sleep(0)  #yield to browser each frame
@@ -449,9 +449,9 @@ async def run_warning_screen(screen: pygame.Surface, clock: pygame.time.Clock, b
 
         screen.blit(preview_bg, (0, 0))
 
-        msg1 = font_title.render("THE COP SPOTTED YOU!", True, (255, 255, 255))
-        msg2 = font_title.render("RUN TOWARDS THE TOP OF THE COLOSSEUM", True, (255, 255, 255))
-        msg3 = font_title.render("BEFORE HE CATCHES YOU!", True, (255, 255, 255))
+        msg1 = font_title.render("THE COP SPOTTED YOU!", True, (255, 140, 0))
+        msg2 = font_title.render("RUN TOWARDS THE TOP OF THE COLOSSEUM", True, (255, 140, 0))
+        msg3 = font_title.render("BEFORE HE CATCHES YOU!", True, (255, 140, 0))
         box_w = max(msg1.get_width(), msg2.get_width(), msg3.get_width()) + 80
         box_h = msg1.get_height() + msg2.get_height() + msg3.get_height() + 70
         box_x = (SCREEN_W - box_w) // 2
@@ -500,12 +500,12 @@ async def run_controls_screen(screen: pygame.Surface, clock: pygame.time.Clock, 
 
         screen.blit(preview_bg, (0, 0))
 
-        draw_center_text(screen, font_title, "CONTROLS", 110, (255, 255, 255))
+        draw_center_text(screen, font_title, "CONTROLS", 110, (255, 140, 0))
 
         start_y = 260
         line_h = 60
         for i, line in enumerate(controls):
-            draw_center_text(screen, font_body, line, start_y + i * line_h, (255, 255, 255))
+            draw_center_text(screen, font_body, line, start_y + i * line_h, (255, 140, 0))
 
         draw_center_text(screen, font_luck, "GOOD LUCK!", start_y + len(controls) * line_h + 50, (255, 215, 0))
         draw_center_text(screen, font_hint, "PRESS ANY KEY OR CLICK TO START", SCREEN_H - 70, (255, 255, 0))

@@ -151,6 +151,11 @@ COP_START_GAP_BY_DIFFICULTY = {
     DIFFICULTY_MEDIUM: 140,
     DIFFICULTY_HARD: 80,
 }
+#Flat grace period (seconds) at the start of EVERY run, all difficulties,
+#where the cop just stands still — on top of the spatial start gap above,
+#not instead of it. Gives the player a fair, consistent moment to get moving
+#before the chase begins, regardless of which difficulty tuning applies.
+COP_HEADSTART_SECONDS = 2.0
 #How long (seconds) the cop tries a normal jump before it builds its OWN
 #platform to climb — its main way of keeping pace once the player starts
 #building. This is the routine behavior, not a rare fallback: it should
@@ -171,6 +176,17 @@ COP_BREAK_PATIENCE_BY_DIFFICULTY = {
     DIFFICULTY_EASY: 6.0,
     DIFFICULTY_MEDIUM: 4.0,
     DIFFICULTY_HARD: 2.5,
+}
+#How long (seconds) the cop takes to actually finish building a platform
+#once it decides to — separate from build PATIENCE above (which is how long
+#it waits before deciding to build at all). The cop is frozen in place for
+#this whole duration, so it's a real, visible "the cop is slower/faster at
+#building" difference, not just a number — Hard barely pauses, Easy stands
+#there constructing for over a second, giving the player a window.
+COP_BUILD_DURATION_BY_DIFFICULTY = {
+    DIFFICULTY_EASY: 1.2,
+    DIFFICULTY_MEDIUM: 0.7,
+    DIFFICULTY_HARD: 0.3,
 }
 #Size of the platform the cop builds for itself — a bit smaller than the
 #player's own default (DEFAULT_PLAT_W/H), so its stepping stones read as

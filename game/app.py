@@ -326,7 +326,7 @@ class GameApp:
             self.player.move_and_collide(dt, self.platforms)
             self.player.clamp_to_world_x(self.world_w)
 
-            self.cop.ai_steer(dt, self.player.rect)
+            self.cop.ai_steer(dt, self.player.rect, self.platforms)
             self.cop.ai_try_jump(self.player.rect, self.platforms)
             #If the cop just used its last-resort fallback and destroyed a
             #platform, spawn a brief visual flash where it used to be
