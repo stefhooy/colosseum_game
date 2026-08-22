@@ -51,9 +51,19 @@ JUMP_REACH_DY = 145
 #How close (px, horizontally) the cop needs to be to its current target
 #before it actually jumps — see ai_try_jump. Jumping from a bad horizontal
 #position just wastes the jump and stalls real progress (which paradoxically
-#makes the cop feel SLOWER, not smarter), so it now waits until it's
-#reasonably lined up, then jumps immediately — no extra delay once aligned.
-JUMP_ALIGN_TOLERANCE = 50
+#makes the cop feel SLOWER, not smarter), so it waits until it's reasonably
+#lined up, then jumps immediately — no extra delay once aligned. Loosened
+#from 50 to commit to jumps a bit sooner (faster-reading decisions) — still
+#well within the width of any platform it'd actually be aiming for.
+JUMP_ALIGN_TOLERANCE = 70
+#How close (px, directly above) something has to be to count as "boxed in
+#right now, jumping or building here can't possibly help" — much shorter
+#range than JUMP_REACH_DY, which is about picking a good target, not
+#detecting an immediate obstruction. Player feedback: the cop could get
+#trapped standing under a low platform (often one of its own, built without
+#checking what was already overhead) with no vertical clearance at all,
+#stuck bonking into the same ceiling forever. See _find_blocking_ceiling.
+CEILING_CLEARANCE = 40
 
 #--- Stuck fallbacks: building (routine), breaking (rare last resort) ---
 #Since the level has no fixed layout (the player builds their own platforms
@@ -102,10 +112,11 @@ class Cop:
 
     Unlike the player, the cop has two stuck fallbacks layered on top of
     real jumps: if it's stuck without real upward progress for a while, it
-    builds its own stepping-stone platform (see _build_platform_toward_player)
-    — a routine, competing-builder behavior, not a rare trick. If even that
-    doesn't resolve things for a much longer stretch, it falls back further
-    to destroying the nearest player-built platform (see
+    builds its own stepping-stone platform (see _start_building) — a
+    routine, competing-builder behavior, not a rare trick, and one that
+    runs in the background rather than freezing the cop in place. If even
+    that doesn't resolve things for a much longer stretch, it falls back
+    further to destroying the nearest player-built platform (see
     _break_nearest_platform) so it's never permanently stuck. Real jumps are
     always tried first.
     """
@@ -143,11 +154,12 @@ class Cop:
         #stall can't repeat forever
         self._platforms_built = 0
         self._platforms_broken = 0
-        #While True, the cop is frozen in place actually constructing the
-        #platform it decided to build — see _start_building/move_and_collide.
+        #While True, a platform the cop already committed to is under
+        #construction in the background — see _start_building/move_and_collide.
         #Takes build_duration seconds, tunable per difficulty (see
         #COP_BUILD_DURATION_BY_DIFFICULTY): a real, visible "how fast the
-        #cop builds" difference, not just how soon it decides to.
+        #cop builds" difference, not just how soon it decides to. Doesn't
+        #stop the cop from steering/jumping/chasing normally in the meantime.
         self._is_building = False
         self._building_timer = 0.0
         self._build_target_x = 0
@@ -211,13 +223,13 @@ class Cop:
     #player's (reaction-delayed) x, but prefers steering toward the nearest
     #reachable platform instead when one exists and climbing is needed — see
     #_find_nearest_reachable_platform. Does nothing during the opening
-    #headstart or while frozen mid-build (see _is_building).
+    #headstart. Building (see _is_building) runs as a background timer and
+    #does NOT stop this — the cop keeps deciding and moving normally while
+    #a platform it already committed to is quietly under construction.
     def ai_steer(self, dt: float, player_rect: pygame.Rect, platforms: List[Platform]) -> None:
         if self._headstart_timer > 0:
             self._headstart_timer -= dt
             self.vx = 0.0
-            return
-        if self._is_building:
             return
 
         #Reaction delay: only refresh the cop's "known" player position every
@@ -245,9 +257,19 @@ class Cop:
         target_x = self._known_player_x
         needs_to_climb = player_rect.top < self.rect.top - CLIMB_TOLERANCE
         if needs_to_climb:
-            nearest = self._find_nearest_reachable_platform(platforms)
-            if nearest is not None:
-                target_x = nearest.rect.centerx
+            ceiling = self._find_blocking_ceiling(platforms)
+            if ceiling is not None:
+                #Boxed in — no jump or build can help until this clears, so
+                #override normal targeting and head for whichever edge of
+                #the blocker is closer (see ai_try_jump for the matching
+                #jump/build suppression while this is true)
+                left_gap = self.rect.centerx - ceiling.rect.left
+                right_gap = ceiling.rect.right - self.rect.centerx
+                target_x = (ceiling.rect.left - self.rect.w) if left_gap <= right_gap else (ceiling.rect.right + self.rect.w)
+            else:
+                nearest = self._find_nearest_reachable_platform(platforms)
+                if nearest is not None:
+                    target_x = nearest.rect.centerx
 
         if target_x > self.rect.centerx + STEER_DEADZONE:
             self.vx = self.speed
@@ -285,6 +307,18 @@ class Cop:
                 best_key = key
         return best
 
+    #Checks for a platform occupying the small space directly above the
+    #cop's head (see CEILING_CLEARANCE) — close enough that no jump could
+    #possibly clear it and no new build there would help either. Distinct
+    #from _find_nearest_reachable_platform: that one picks a good target to
+    #aim for, this one detects "I am currently physically boxed in."
+    def _find_blocking_ceiling(self, platforms: List[Platform]) -> Optional[Platform]:
+        probe = pygame.Rect(self.rect.x, self.rect.top - CEILING_CLEARANCE, self.rect.w, CEILING_CLEARANCE)
+        for p in platforms:
+            if probe.colliderect(p.rect):
+                return p
+        return None
+
     #Jumps when the player is above the cop, it's on solid ground, AND it's
     #actually lined up with whatever it's aiming for (see JUMP_ALIGN_TOLERANCE)
     #— a smart cop doesn't jump from a bad position just because it's grounded;
@@ -300,11 +334,14 @@ class Cop:
     #much later, if that's still not enough, it destroys the nearest
     #player-built platform instead (rare last resort — see
     #COP_BREAK_PATIENCE_BY_DIFFICULTY). Does nothing during the opening
-    #headstart or while frozen mid-build.
+    #headstart. Building runs in the background (see _is_building) and does
+    #NOT block this — the cop can keep jumping, chasing, even starting a
+    #break, all while a platform it already committed to is under
+    #construction; it just can't start a SECOND build on top of the first.
     def ai_try_jump(self, player_rect: pygame.Rect, platforms: List[Platform]) -> None:
         #Cleared every call — only set for the one frame a break actually happens
         self.last_broken_platform_rect = None
-        if self._headstart_timer > 0 or self._is_building:
+        if self._headstart_timer > 0:
             return
         needs_to_climb = player_rect.top < self.rect.top - CLIMB_TOLERANCE
         if not (needs_to_climb and self.on_ground):
@@ -312,8 +349,15 @@ class Cop:
         if self._stuck_timer >= self.break_patience and self._platforms_broken < MAX_PLATFORM_BREAKS:
             self._break_nearest_platform(platforms)
             return
-        if self._stuck_timer >= self.build_patience and self._platforms_built < MAX_COP_BUILDS:
-            self._start_building()
+        #Boxed in directly overhead — no jump or new build can help right
+        #now, only the sideways escape ai_steer is doing can. Breaking
+        #(above) still runs normally though: once patience runs out, it's
+        #actually a reasonable way to clear whatever's trapping it, and
+        #that platform is almost always the nearest one anyway.
+        if self._find_blocking_ceiling(platforms) is not None:
+            return
+        if not self._is_building and self._stuck_timer >= self.build_patience and self._platforms_built < MAX_COP_BUILDS:
+            self._start_building(platforms)
             return
         #Same target ai_steer is currently walking toward — a reachable
         #platform if one exists, otherwise the player directly
@@ -325,21 +369,29 @@ class Cop:
 
     #Starts building a stepping-stone platform for itself, the same way the
     #player builds — a real, physics-based platform within normal jump
-    #range, not a teleport. The cop freezes in place for build_duration
-    #seconds (see COP_BUILD_DURATION_BY_DIFFICULTY — a real, visible "how
-    #fast the cop builds" difference between difficulties) before the
-    #platform actually appears; see move_and_collide for the completion.
-    #Target position is computed now (biased toward the player's x, capped
-    #by COP_BUILD_RISE so a following normal jump can reach it) so it stays
-    #fixed for the whole build even if the player moves in the meantime.
-    def _start_building(self) -> None:
+    #range, not a teleport. Takes build_duration seconds to actually appear
+    #(see COP_BUILD_DURATION_BY_DIFFICULTY — a real, visible "how fast the
+    #cop builds" difference between difficulties), but runs as a background
+    #timer, NOT a freeze — the cop keeps steering/jumping/chasing normally
+    #the whole time (player feedback: it should be making decisions while
+    #it moves, not going inert to "think"). Target position is computed now
+    #(biased toward the player's x, capped by COP_BUILD_RISE so a following
+    #normal jump can reach it) so it stays fixed regardless of where the cop
+    #wanders off to in the meantime — see move_and_collide for the
+    #completion. Skips starting entirely if that spot would overlap an
+    #existing platform — better to just try again next frame (or fall
+    #through to breaking once patience runs out) than add a redundant one.
+    def _start_building(self, platforms: List[Platform]) -> None:
         build_cx = self.rect.centerx + max(-80, min(80, self._known_player_x - self.rect.centerx))
-        self._build_target_x = int(build_cx - COP_BUILD_PLAT_W / 2)
-        self._build_target_y = int(self.rect.top - COP_BUILD_RISE)
+        target_x = int(build_cx - COP_BUILD_PLAT_W / 2)
+        target_y = int(self.rect.top - COP_BUILD_RISE)
+        target_rect = pygame.Rect(target_x, target_y, COP_BUILD_PLAT_W, COP_BUILD_PLAT_H)
+        if any(target_rect.colliderect(p.rect) for p in platforms):
+            return
+        self._build_target_x = target_x
+        self._build_target_y = target_y
         self._is_building = True
         self._building_timer = self.build_duration
-        self.vx = 0.0
-        self.vy = 0.0
 
     #Destroys the player-built platform nearest to the cop (never the floor,
     #platforms[0]) — the last-resort fallback for a gap real jumps can't
@@ -392,9 +444,11 @@ class Cop:
 
     #Applies gravity, updates position, and handles collision detection —
     #identical two-pass approach to Player.move_and_collide (same shared
-    #platform list the player builds onto and the cop can break). While
-    #mid-build (see _start_building), skips physics entirely and just counts
-    #down the timer, appending the actual platform once it completes.
+    #platform list the player builds onto and the cop can break). Building
+    #(see _start_building) counts down here too, but only as a background
+    #timer — physics runs normally every frame regardless, so the cop never
+    #goes inert while a platform is under construction; the platform simply
+    #appears at its precomputed spot once the timer completes.
     def move_and_collide(self, dt: float, platforms: List[Platform]) -> None:
         if self._is_building:
             self._building_timer -= dt
@@ -406,7 +460,6 @@ class Cop:
                 self._platforms_built += 1
                 self._stuck_timer = 0.0
                 self._is_building = False
-            return
 
         self.vy += self.gravity * dt
         self.on_ground = False
